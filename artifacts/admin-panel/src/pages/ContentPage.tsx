@@ -145,6 +145,7 @@ export default function ContentPage() {
 
   const mainCategories = categories.filter((category) => !category.parentId);
   const subCategories = categories.filter((category) => category.parentId === mainCategoryId);
+  const requiresSubCategory = mainCategoryId !== "" && subCategories.length > 0;
 
   const clearMedia = () => {
     setMediaFile(null);
@@ -192,6 +193,15 @@ export default function ContentPage() {
       toast({
         title: "Missing fields",
         description: "Category and image are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (requiresSubCategory && !subCategoryId) {
+      toast({
+        title: "Subcategory required",
+        description: "Please select a subcategory for this main category.",
         variant: "destructive",
       });
       return;
@@ -329,14 +339,14 @@ export default function ContentPage() {
 
           {mainCategoryId && subCategories.length > 0 && (
             <div>
-              <Label htmlFor="media-sub-category">Subcategory</Label>
+              <Label htmlFor="media-sub-category">Subcategory <span className="text-red-500">*</span></Label>
               <select
                 id="media-sub-category"
                 value={subCategoryId}
                 onChange={(event) => setSubCategoryId(event.target.value)}
                 className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Optional: select subcategory</option>
+                <option value="">Select subcategory</option>
                 {subCategories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -380,7 +390,7 @@ export default function ContentPage() {
           <div className="flex gap-2">
             <Button
               onClick={handleSaveMedia}
-              disabled={savingMedia || !mainCategoryId || (!editingMediaId && !mediaFile)}
+              disabled={savingMedia || !mainCategoryId || (!editingMediaId && !mediaFile) || (requiresSubCategory && !subCategoryId)}
             >
               {savingMedia ? (
                 <>

@@ -4,8 +4,12 @@ import {
   addDoc,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
+  query,
   serverTimestamp,
+  updateDoc,
+  where,
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -14,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BRAND_NAME } from "@/lib/branding";
-import { Trash2, Plus, Tag, FolderTree } from "lucide-react";
+import { Trash2, Plus, Tag, FolderTree, Pencil, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Category {
@@ -31,6 +35,10 @@ export default function CategoriesPage() {
   const [subCategoryName, setSubCategoryName] = useState("");
   const [selectedParentId, setSelectedParentId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [editingParentId, setEditingParentId] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -44,6 +52,30 @@ export default function CategoriesPage() {
   const mainCategories = categories.filter((cat) => !cat.parentId);
   const getSubCategories = (parentId: string) =>
     categories.filter((cat) => cat.parentId === parentId);
+  const editingCategory = categories.find((category) => category.id === editingCategoryId);
+  const isEditingSubCategory = Boolean(editingCategory?.parentId);
+
+  const resetEditForm = () => {
+    setEditingCategoryId(null);
+    setEditingCategoryName("");
+    setEditingParentId("");
+  };
+
+  const startEditingCategory = (category: Category) => {
+    setEditingCategoryId(category.id);
+    setEditingCategoryName(category.name);
+    setEditingParentId(category.parentId || "");
+  };
+
+  const commitBatches = async (operations: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }>) => {
+    for (let index = 0; index < operations.length; index += 450) {
+      const batch = writeBatch(db);
+      operations.slice(index, index + 450).forEach(({ ref, data }) => {
+        batch.update(ref, data);
+      });
+      await batch.commit();
+    }
+  };
 
   const addMainCategory = async () => {
     if (!mainCategoryName.trim()) return;
@@ -84,6 +116,132 @@ export default function CategoriesPage() {
       toast({ title: "Error", description: "Failed to add subcategory. Please try again.", variant: "destructive" });
     }
     setLoading(false);
+  };
+
+  const saveCategoryEdit = async () => {
+    if (!editingCategory || !editingCategoryName.trim()) return;
+
+    const nextName = editingCategoryName.trim();
+    const nextParentId = editingCategory.parentId ? editingParentId : "";
+    const nextParent = nextParentId
+      ? mainCategories.find((category) => category.id === nextParentId)
+      : undefined;
+
+    if (editingCategory.parentId && !nextParent) {
+      toast({ title: "Error", description: "Please select a valid main category.", variant: "destructive" });
+      return;
+    }
+
+    setSavingEdit(true);
+
+    try {
+      await updateDoc(doc(db, "categories", editingCategory.id), {
+        name: nextName,
+        ...(editingCategory.parentId
+          ? {
+              parentId: nextParent?.id || "",
+              parentName: nextParent?.name || "",
+            }
+          : {}),
+        updatedAt: serverTimestamp(),
+      });
+
+      const operations: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }> = [];
+
+      if (!editingCategory.parentId) {
+        const childSnapshot = await getDocs(query(collection(db, "categories"), where("parentId", "==", editingCategory.id)));
+        childSnapshot.forEach((childDoc) => {
+          operations.push({
+            ref: doc(db, "categories", childDoc.id),
+            data: {
+              parentName: nextName,
+              updatedAt: serverTimestamp(),
+            },
+          });
+        });
+      }
+
+      const [projectsSnapshot, contentSnapshot] = await Promise.all([
+        getDocs(collection(db, "projects")),
+        getDocs(collection(db, "content")),
+      ]);
+
+      projectsSnapshot.forEach((projectDoc) => {
+        const project = projectDoc.data();
+        const updateData: Record<string, unknown> = {};
+
+        if (!editingCategory.parentId && project.mainCategoryId === editingCategory.id) {
+          updateData.mainCategoryName = nextName;
+        }
+
+        if (editingCategory.parentId && project.subCategoryId === editingCategory.id) {
+          updateData.subCategoryName = nextName;
+        }
+
+        if (editingCategory.parentId && project.categoryId === editingCategory.id) {
+          updateData.categoryName = nextName;
+        }
+
+        if (!editingCategory.parentId && !project.subCategoryId && project.categoryId === editingCategory.id) {
+          updateData.categoryName = nextName;
+        }
+
+        if (editingCategory.parentId && nextParent && project.subCategoryId === editingCategory.id) {
+          updateData.mainCategoryId = nextParent.id;
+          updateData.mainCategoryName = nextParent.name;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          updateData.updatedAt = serverTimestamp();
+          operations.push({
+            ref: doc(db, "projects", projectDoc.id),
+            data: updateData,
+          });
+        }
+      });
+
+      contentSnapshot.forEach((contentDoc) => {
+        const item = contentDoc.data();
+        const updateData: Record<string, unknown> = {};
+
+        if (!editingCategory.parentId && item.mainCategoryId === editingCategory.id) {
+          updateData.mainCategoryName = nextName;
+        }
+
+        if (editingCategory.parentId && item.subCategoryId === editingCategory.id) {
+          updateData.subCategoryName = nextName;
+        }
+
+        if (editingCategory.parentId && item.categoryId === editingCategory.id) {
+          updateData.categoryName = nextName;
+        }
+
+        if (!editingCategory.parentId && !item.subCategoryId && item.categoryId === editingCategory.id) {
+          updateData.categoryName = nextName;
+        }
+
+        if (editingCategory.parentId && nextParent && item.subCategoryId === editingCategory.id) {
+          updateData.mainCategoryId = nextParent.id;
+          updateData.mainCategoryName = nextParent.name;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          updateData.updatedAt = serverTimestamp();
+          operations.push({
+            ref: doc(db, "content", contentDoc.id),
+            data: updateData,
+          });
+        }
+      });
+
+      await commitBatches(operations);
+      resetEditForm();
+      toast({ title: "Category updated successfully." });
+    } catch {
+      toast({ title: "Error", description: "Failed to update category.", variant: "destructive" });
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const deleteCategory = async (id: string) => {
@@ -177,6 +335,65 @@ export default function CategoriesPage() {
         </CardContent>
       </Card>
 
+      {editingCategory && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {isEditingSubCategory ? "Edit Subcategory" : "Edit Main Category"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {isEditingSubCategory && (
+              <div>
+                <Label htmlFor="edit-parent-category">Main Category</Label>
+                <select
+                  id="edit-parent-category"
+                  value={editingParentId}
+                  onChange={(event) => setEditingParentId(event.target.value)}
+                  className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">Select main category</option>
+                  {mainCategories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <Label htmlFor="edit-category-name">Category Name</Label>
+              <Input
+                id="edit-category-name"
+                value={editingCategoryName}
+                onChange={(event) => setEditingCategoryName(event.target.value)}
+                placeholder="Enter category name..."
+                className="mt-1"
+                onKeyDown={(event) => event.key === "Enter" && saveCategoryEdit()}
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={saveCategoryEdit}
+                disabled={savingEdit || !editingCategoryName.trim() || (isEditingSubCategory && !editingParentId)}
+              >
+                {savingEdit ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+              <Button variant="outline" onClick={resetEditForm} disabled={savingEdit}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="space-y-2">
         {categories.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
@@ -204,14 +421,24 @@ export default function CategoriesPage() {
                         : "No subcategories yet"}
                     </p>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
-                    onClick={() => deleteCategory(cat.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => startEditingCategory(cat)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => deleteCategory(cat.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
 
                 {subCategories.length > 0 && (
@@ -223,6 +450,14 @@ export default function CategoriesPage() {
                       >
                         <Tag className="w-3.5 h-3.5" />
                         <span>{subCategory.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => startEditingCategory(subCategory)}
+                          className="rounded-full text-blue-500 hover:text-blue-700"
+                          aria-label={`Edit ${subCategory.name}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => deleteCategory(subCategory.id)}

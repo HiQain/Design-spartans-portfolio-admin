@@ -149,6 +149,7 @@ export default function ProjectsPage() {
 
   const mainCategories = categories.filter((cat) => !cat.parentId);
   const availableSubCategories = categories.filter((cat) => cat.parentId === mainCategoryId);
+  const requiresSubCategory = mainCategoryId !== "" && availableSubCategories.length > 0;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -182,6 +183,15 @@ export default function ProjectsPage() {
 
   const addProject = async () => {
     if (!title.trim() || !link.trim()) return;
+
+    if (requiresSubCategory && !subCategoryId) {
+      toast({
+        title: "Subcategory required",
+        description: "Please select a subcategory for this main category.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (imageMode === "upload" && !imageFile) {
       toast({
@@ -373,14 +383,14 @@ export default function ProjectsPage() {
 
             {mainCategoryId && availableSubCategories.length > 0 && (
               <div>
-                <Label htmlFor="proj-sub-cat">Subcategory</Label>
+                <Label htmlFor="proj-sub-cat">Subcategory <span className="text-red-500">*</span></Label>
                 <select
                   id="proj-sub-cat"
                   value={subCategoryId}
                   onChange={(e) => setSubCategoryId(e.target.value)}
                   className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="">— Optional: select a subcategory —</option>
+                  <option value="">— Select a subcategory —</option>
                   {availableSubCategories.map((cat) => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
@@ -473,7 +483,7 @@ export default function ProjectsPage() {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button onClick={addProject} disabled={loading || uploading || !title.trim() || !link.trim()}>
+              <Button onClick={addProject} disabled={loading || uploading || !title.trim() || !link.trim() || (requiresSubCategory && !subCategoryId)}>
                 {uploading ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing image...</>
                 ) : loading ? (
