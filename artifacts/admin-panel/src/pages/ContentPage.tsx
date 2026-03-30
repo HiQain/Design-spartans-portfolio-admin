@@ -6,7 +6,7 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
-  setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { BRAND_NAME } from "@/lib/branding";
@@ -15,8 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { ImageIcon, Loader2, Trash2, Upload, FileText } from "lucide-react";
+import { ImageIcon, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 
 interface Category {
   id: string;
@@ -37,10 +36,6 @@ interface MediaItem {
   createdAt?: {
     seconds?: number;
   };
-}
-
-interface TopContentDoc {
-  content?: string;
 }
 
 const MAX_EMBEDDED_IMAGE_BYTES = 700 * 1024;
@@ -125,11 +120,11 @@ export default function ContentPage() {
   const [subCategoryId, setSubCategoryId] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState("");
-  const [content, setContent] = useState("");
-  const [savedContent, setSavedContent] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [savingMedia, setSavingMedia] = useState(false);
-  const [savingContent, setSavingContent] = useState(false);
+  const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formCardRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -142,17 +137,9 @@ export default function ContentPage() {
       setMediaItems(data.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)));
     });
 
-    const unsubTopContent = onSnapshot(doc(db, "topContent", "primary"), (snapshot) => {
-      const data = snapshot.data() as TopContentDoc | undefined;
-      const nextContent = data?.content ?? "";
-      setSavedContent(nextContent);
-      setContent((currentValue) => (currentValue ? currentValue : nextContent));
-    });
-
     return () => {
       unsubCategories();
       unsubMedia();
-      unsubTopContent();
     };
   }, []);
 
@@ -163,6 +150,14 @@ export default function ContentPage() {
     setMediaFile(null);
     setMediaPreview("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const resetMediaForm = () => {
+    setMediaTitle("");
+    setMainCategoryId("");
+    setSubCategoryId("");
+    setEditingMediaId(null);
+    clearMedia();
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,10 +188,10 @@ export default function ContentPage() {
   };
 
   const handleSaveMedia = async () => {
-    if (!mediaTitle.trim() || !mainCategoryId || !mediaFile) {
+    if (!mainCategoryId || (!editingMediaId && !mediaFile)) {
       toast({
         title: "Missing fields",
-        description: "Media title, category, and image are required.",
+        description: "Category and image are required.",
         variant: "destructive",
       });
       return;
@@ -205,12 +200,12 @@ export default function ContentPage() {
     setSavingMedia(true);
 
     try {
-      const imageUrl = await fileToEmbeddedImage(mediaFile);
+      const imageUrl = mediaFile ? await fileToEmbeddedImage(mediaFile) : mediaPreview;
       const mainCategory = categories.find((category) => category.id === mainCategoryId);
       const subCategory = categories.find((category) => category.id === subCategoryId);
       const selectedCategory = subCategory ?? mainCategory;
 
-      await addDoc(collection(db, "media"), {
+      const payload = {
         title: mediaTitle.trim(),
         imageUrl,
         categoryId: selectedCategory?.id ?? "",
@@ -219,14 +214,23 @@ export default function ContentPage() {
         mainCategoryName: mainCategory?.name ?? "",
         subCategoryId: subCategory?.id ?? "",
         subCategoryName: subCategory?.name ?? "",
-        createdAt: serverTimestamp(),
-      });
+      };
 
-      setMediaTitle("");
-      setMainCategoryId("");
-      setSubCategoryId("");
-      clearMedia();
-      toast({ title: "Media uploaded successfully." });
+      if (editingMediaId) {
+        await updateDoc(doc(db, "media", editingMediaId), {
+          ...payload,
+          updatedAt: serverTimestamp(),
+        });
+        toast({ title: "Media updated successfully." });
+      } else {
+        await addDoc(collection(db, "media"), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+        toast({ title: "Media uploaded successfully." });
+      }
+
+      resetMediaForm();
     } catch (error) {
       toast({
         title: "Error",
@@ -251,54 +255,52 @@ export default function ContentPage() {
     }
   };
 
-  const handleSaveContent = async () => {
-    if (!content.trim()) {
-      toast({
-        title: "Content required",
-        description: "Please add top content before saving.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSavingContent(true);
-
-    try {
-      await setDoc(doc(db, "topContent", "primary"), {
-        content: content.trim(),
-        updatedAt: serverTimestamp(),
-      });
-      toast({ title: "Top content updated." });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: getErrorMessage(error, "Failed to save top content."),
-        variant: "destructive",
-      });
-    } finally {
-      setSavingContent(false);
-    }
+  const handleEditMedia = (item: MediaItem) => {
+    setEditingMediaId(item.id);
+    setMediaTitle(item.title ?? "");
+    setMainCategoryId(item.mainCategoryId || item.categoryId || "");
+    setSubCategoryId(item.subCategoryId || "");
+    setMediaPreview(item.imageUrl || "");
+    setMediaFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredMediaItems = mediaItems.filter((item) => {
+    if (!normalizedQuery) return true;
+
+    return [
+      item.title,
+      item.categoryName,
+      item.mainCategoryName,
+      item.subCategoryName,
+    ]
+      .filter(Boolean)
+      .some((value) => value?.toLowerCase().includes(normalizedQuery));
+  });
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Content</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Manage uploaded media and top section content for {BRAND_NAME}
+          Manage uploaded media for {BRAND_NAME}
         </p>
       </div>
 
-      <Card>
+      <Card ref={formCardRef}>
         <CardHeader>
-          <CardTitle className="text-base">Upload Media</CardTitle>
+          <CardTitle className="text-base">
+            {editingMediaId ? "Edit Media" : "Upload Media"}
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="media-title">Media Title</Label>
             <Input
               id="media-title"
-              placeholder="Enter media title..."
+              placeholder="Optional media title..."
               value={mediaTitle}
               onChange={(event) => setMediaTitle(event.target.value)}
               className="mt-1"
@@ -378,32 +380,43 @@ export default function ContentPage() {
           <div className="flex gap-2">
             <Button
               onClick={handleSaveMedia}
-              disabled={savingMedia || !mediaTitle.trim() || !mainCategoryId || !mediaFile}
+              disabled={savingMedia || !mainCategoryId || (!editingMediaId && !mediaFile)}
             >
               {savingMedia ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Uploading...
+                  {editingMediaId ? "Saving..." : "Uploading..."}
                 </>
               ) : (
-                "Save Media"
+                editingMediaId ? "Update Media" : "Save Media"
               )}
             </Button>
-            <Button variant="outline" onClick={clearMedia}>
-              Clear File
+            <Button variant="outline" onClick={resetMediaForm}>
+              {editingMediaId ? "Cancel" : "Clear Form"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
       <div className="space-y-3">
-        {mediaItems.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <Label htmlFor="content-search">Search Content</Label>
+          <Input
+            id="content-search"
+            className="mt-2"
+            placeholder="Search by title or category..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </div>
+
+        {filteredMediaItems.length === 0 ? (
           <div className="rounded-xl border border-dashed border-gray-200 bg-white px-4 py-10 text-center text-gray-400">
             <ImageIcon className="mx-auto mb-2 h-10 w-10 opacity-30" />
-            <p>No media uploaded yet.</p>
+            <p>{mediaItems.length === 0 ? "No media uploaded yet." : "No matching content found."}</p>
           </div>
         ) : (
-          mediaItems.map((item) => (
+          filteredMediaItems.map((item) => (
             <div key={item.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
               {item.imageUrl && (
                 <img
@@ -417,68 +430,36 @@ export default function ContentPage() {
               )}
               <div className="flex items-start justify-between gap-3 p-4">
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-gray-900">{item.title}</h3>
+                  <h3 className="font-semibold text-gray-900">{item.title || "Untitled Media"}</h3>
                   <p className="mt-1 text-sm text-gray-500">
                     {item.mainCategoryName && item.subCategoryName
                       ? `${item.mainCategoryName} / ${item.subCategoryName}`
                       : item.categoryName || "Uncategorized"}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 text-red-500 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => handleDeleteMedia(item.id)}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                    onClick={() => handleEditMedia(item)}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-red-500 hover:bg-red-50 hover:text-red-700"
+                    onClick={() => handleDeleteMedia(item.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           ))
         )}
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Top Content</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="top-content">Content</Label>
-            <Textarea
-              id="top-content"
-              rows={5}
-              className="mt-1 resize-none"
-              placeholder="Add top section content here..."
-              value={content}
-              onChange={(event) => setContent(event.target.value)}
-            />
-          </div>
-
-          <div className="flex gap-2">
-            <Button onClick={handleSaveContent} disabled={savingContent || !content.trim()}>
-              {savingContent ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Content"
-              )}
-            </Button>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div className="flex items-center gap-2 text-gray-700">
-              <FileText className="h-4 w-4" />
-              <span className="text-sm font-medium">Saved Preview</span>
-            </div>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-gray-600">
-              {savedContent || "No top content saved yet."}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

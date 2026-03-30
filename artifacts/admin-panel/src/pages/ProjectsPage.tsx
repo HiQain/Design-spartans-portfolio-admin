@@ -6,6 +6,7 @@ import {
   doc,
   onSnapshot,
   serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BRAND_NAME } from "@/lib/branding";
-import { Trash2, Plus, FolderOpen, ExternalLink, Upload, Link, ImageIcon, X, Loader2 } from "lucide-react";
+import { Trash2, Plus, FolderOpen, ExternalLink, Upload, Link, ImageIcon, X, Loader2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Category {
@@ -129,7 +130,10 @@ export default function ProjectsPage() {
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formCardRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -170,6 +174,8 @@ export default function ProjectsPage() {
 
   const resetForm = () => {
     setTitle(""); setDescription(""); setLink(""); setMainCategoryId(""); setSubCategoryId("");
+    setEditingProjectId(null);
+    setImageMode("upload");
     clearImage();
     setShowForm(false);
   };
@@ -201,7 +207,7 @@ export default function ProjectsPage() {
       const subCategory = categories.find((c) => c.id === subCategoryId);
       const selectedCategory = subCategory ?? mainCategory;
 
-      await addDoc(collection(db, "projects"), {
+      const payload = {
         title: title.trim(),
         description: description.trim(),
         link: link.trim(),
@@ -212,10 +218,23 @@ export default function ProjectsPage() {
         mainCategoryName: mainCategory?.name || "",
         subCategoryId: subCategory?.id || "",
         subCategoryName: subCategory?.name || "",
-        createdAt: serverTimestamp(),
-      });
+      };
+
+      if (editingProjectId) {
+        await updateDoc(doc(db, "projects", editingProjectId), {
+          ...payload,
+          updatedAt: serverTimestamp(),
+        });
+        toast({ title: "Project updated successfully." });
+      } else {
+        await addDoc(collection(db, "projects"), {
+          ...payload,
+          createdAt: serverTimestamp(),
+        });
+        toast({ title: "Project added successfully." });
+      }
+
       resetForm();
-      toast({ title: "Project added successfully." });
     } catch (err) {
       toast({
         title: "Error",
@@ -237,7 +256,39 @@ export default function ProjectsPage() {
     }
   };
 
-  const currentPreview = imageMode === "url" ? imageUrl : imagePreview;
+  const editProject = (project: Project) => {
+    setEditingProjectId(project.id);
+    setTitle(project.title || "");
+    setDescription(project.description || "");
+    setLink(project.link || "");
+    setMainCategoryId(project.mainCategoryId || project.categoryId || "");
+    setSubCategoryId(project.subCategoryId || "");
+    setImageFile(null);
+    setImageUrl(project.imageUrl || "");
+    setImagePreview(project.imageUrl || "");
+    setImageMode("url");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setShowForm(true);
+    requestAnimationFrame(() => {
+      formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredProjects = projects.filter((project) => {
+    if (!normalizedQuery) return true;
+
+    return [
+      project.title,
+      project.description,
+      project.link,
+      project.categoryName,
+      project.mainCategoryName,
+      project.subCategoryName,
+    ]
+      .filter(Boolean)
+      .some((value) => value?.toLowerCase().includes(normalizedQuery));
+  });
 
   return (
     <div className="space-y-6">
@@ -246,16 +297,26 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
           <p className="text-sm text-gray-500 mt-1">Manage portfolio projects published under {BRAND_NAME}</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button
+          onClick={() => {
+            if (showForm && editingProjectId) {
+              resetForm();
+              return;
+            }
+            setShowForm(!showForm);
+          }}
+        >
           <Plus className="w-4 h-4 mr-1" />
-          New Project
+          {showForm ? (editingProjectId ? "Close Editor" : "Hide Form") : "New Project"}
         </Button>
       </div>
 
       {showForm && (
-        <Card>
+        <Card ref={formCardRef}>
           <CardHeader>
-            <CardTitle className="text-base">Project Details</CardTitle>
+            <CardTitle className="text-base">
+              {editingProjectId ? "Edit Project" : "Project Details"}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
@@ -417,7 +478,7 @@ export default function ProjectsPage() {
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing image...</>
                 ) : loading ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
-                ) : "Save Project"}
+                ) : editingProjectId ? "Update Project" : "Save Project"}
               </Button>
               <Button variant="outline" onClick={resetForm}>Cancel</Button>
             </div>
@@ -426,13 +487,24 @@ export default function ProjectsPage() {
       )}
 
       <div className="space-y-3">
-        {projects.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <Label htmlFor="project-search">Search Projects</Label>
+          <Input
+            id="project-search"
+            className="mt-2"
+            placeholder="Search by title, link, description, or category..."
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+          />
+        </div>
+
+        {filteredProjects.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <FolderOpen className="w-10 h-10 mx-auto mb-2 opacity-30" />
-            <p>No projects yet. Add your first one above.</p>
+            <p>{projects.length === 0 ? "No projects yet. Add your first one above." : "No matching projects found."}</p>
           </div>
         ) : (
-          projects.map((proj) => (
+          filteredProjects.map((proj) => (
             <div key={proj.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
               {proj.imageUrl && (
                 <img
@@ -468,6 +540,14 @@ export default function ProjectsPage() {
                       {proj.link}
                     </a>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 shrink-0"
+                    onClick={() => editProject(proj)}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

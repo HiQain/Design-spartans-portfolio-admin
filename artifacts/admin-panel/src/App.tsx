@@ -7,6 +7,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import CategoriesPage from "@/pages/CategoriesPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import ContentPage from "@/pages/ContentPage";
+import TopContentPage from "@/pages/TopContentPage";
 import LoginPage from "@/pages/LoginPage";
 import { APP_TITLE, BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/branding";
 import {
@@ -17,15 +18,17 @@ import {
   LogOut,
   Loader2,
   FileText,
+  Newspaper,
 } from "lucide-react";
 
-type Page = "dashboard" | "categories" | "projects" | "content";
+type Page = "dashboard" | "categories" | "projects" | "content" | "top-content";
 
 const navItems = [
   { id: "dashboard" as Page, label: "Dashboard", icon: LayoutDashboard },
   { id: "categories" as Page, label: "Categories", icon: Tag },
   { id: "projects" as Page, label: "Projects", icon: FolderOpen },
   { id: "content" as Page, label: "Content", icon: FileText },
+  { id: "top-content" as Page, label: "Top Content", icon: Newspaper },
 ];
 
 function App() {
@@ -73,6 +76,7 @@ function App() {
     categories: <CategoriesPage />,
     projects: <ProjectsPage />,
     content: <ContentPage />,
+    "top-content": <TopContentPage />,
   };
 
   return (
