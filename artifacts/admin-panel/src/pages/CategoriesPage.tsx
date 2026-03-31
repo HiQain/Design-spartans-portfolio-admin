@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type DragEvent } from "react";
 import {
   collection,
   addDoc,
@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BRAND_NAME } from "@/lib/branding";
-import { Trash2, Plus, Tag, FolderTree, Pencil, Loader2 } from "lucide-react";
+import { Trash2, Plus, Tag, FolderTree, Pencil, Loader2, GripVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Category {
@@ -27,6 +27,7 @@ interface Category {
   parentId?: string;
   parentName?: string;
   createdAt: any;
+  sortOrder?: number;
 }
 
 export default function CategoriesPage() {
@@ -39,12 +40,27 @@ export default function CategoriesPage() {
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [editingParentId, setEditingParentId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [draggingCategoryId, setDraggingCategoryId] = useState<string | null>(null);
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<"before" | "after" | null>(null);
+  const [reordering, setReordering] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "categories"), (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
-      setCategories(data.sort((a, b) => a.name.localeCompare(b.name)));
+      setCategories(
+        data.sort((a, b) => {
+          const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+          const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+
+          return a.name.localeCompare(b.name);
+        }),
+      );
     });
     return unsub;
   }, []);
@@ -54,6 +70,129 @@ export default function CategoriesPage() {
     categories.filter((cat) => cat.parentId === parentId);
   const editingCategory = categories.find((category) => category.id === editingCategoryId);
   const isEditingSubCategory = Boolean(editingCategory?.parentId);
+
+  const getNextSortOrder = (parentId?: string) => {
+    const siblingCategories = categories.filter((category) => (category.parentId || "") === (parentId || ""));
+    if (siblingCategories.length === 0) {
+      return 0;
+    }
+
+    return Math.max(...siblingCategories.map((category) => category.sortOrder ?? 0)) + 1;
+  };
+
+  const persistCategoryOrder = async (orderedCategories: Category[]) => {
+    const operations = orderedCategories.map((category, index) => ({
+      ref: doc(db, "categories", category.id),
+      data: {
+        sortOrder: index,
+        updatedAt: serverTimestamp(),
+      },
+    }));
+
+    await commitBatches(operations);
+  };
+
+  const reorderCategories = async (draggedId: string, targetId: string, insertAfter = false) => {
+    if (draggedId === targetId) {
+      return;
+    }
+
+    const draggedCategory = categories.find((category) => category.id === draggedId);
+    const targetCategory = categories.find((category) => category.id === targetId);
+
+    if (!draggedCategory || !targetCategory) {
+      return;
+    }
+
+    const draggedParentId = draggedCategory.parentId || "";
+    const targetParentId = targetCategory.parentId || "";
+
+    if (draggedParentId !== targetParentId) {
+      return;
+    }
+
+    const siblingCategories = categories.filter((category) => (category.parentId || "") === draggedParentId);
+    const draggedIndex = siblingCategories.findIndex((category) => category.id === draggedId);
+    const targetIndex = siblingCategories.findIndex((category) => category.id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      return;
+    }
+
+    const reordered = [...siblingCategories];
+    const [movedCategory] = reordered.splice(draggedIndex, 1);
+    const adjustedTargetIndex = reordered.findIndex((category) => category.id === targetId);
+    const insertionIndex = adjustedTargetIndex === -1
+      ? reordered.length
+      : adjustedTargetIndex + (insertAfter ? 1 : 0);
+    reordered.splice(insertionIndex, 0, movedCategory);
+
+    setCategories((currentCategories) => {
+      const otherCategories = currentCategories.filter(
+        (category) => (category.parentId || "") !== draggedParentId,
+      );
+
+      return [...otherCategories, ...reordered.map((category, index) => ({ ...category, sortOrder: index }))].sort(
+        (a, b) => {
+          const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+          const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+
+          if (orderA !== orderB) {
+            return orderA - orderB;
+          }
+
+          return a.name.localeCompare(b.name);
+        },
+      );
+    });
+
+    setReordering(true);
+
+    try {
+      await persistCategoryOrder(reordered);
+      toast({ title: "Category order updated." });
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to save category order.",
+        variant: "destructive",
+      });
+    } finally {
+      setReordering(false);
+    }
+  };
+
+  const handleDragStart = (categoryId: string) => {
+    setDraggingCategoryId(categoryId);
+    setDragOverCategoryId(categoryId);
+    setDragOverPosition(null);
+  };
+
+  const handleDragEnter = (categoryId: string, position: "before" | "after" = "before") => {
+    if (draggingCategoryId && draggingCategoryId !== categoryId) {
+      setDragOverCategoryId(categoryId);
+      setDragOverPosition(position);
+    }
+  };
+
+  const handleDrop = async (categoryId: string, position: "before" | "after" = "before") => {
+    if (!draggingCategoryId) {
+      return;
+    }
+
+    setDragOverCategoryId(categoryId);
+    setDragOverPosition(position);
+    await reorderCategories(draggingCategoryId, categoryId, position === "after");
+    setDraggingCategoryId(null);
+    setDragOverCategoryId(null);
+    setDragOverPosition(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggingCategoryId(null);
+    setDragOverCategoryId(null);
+    setDragOverPosition(null);
+  };
 
   const resetEditForm = () => {
     setEditingCategoryId(null);
@@ -84,6 +223,7 @@ export default function CategoriesPage() {
       await addDoc(collection(db, "categories"), {
         name: mainCategoryName.trim(),
         createdAt: serverTimestamp(),
+        sortOrder: getNextSortOrder(),
       });
       setMainCategoryName("");
       toast({ title: "Main category added successfully." });
@@ -109,6 +249,7 @@ export default function CategoriesPage() {
         parentId: parent.id,
         parentName: parent.name,
         createdAt: serverTimestamp(),
+        sortOrder: getNextSortOrder(parent.id),
       });
       setSubCategoryName("");
       toast({ title: "Subcategory added successfully." });
@@ -126,6 +267,7 @@ export default function CategoriesPage() {
     const nextParent = nextParentId
       ? mainCategories.find((category) => category.id === nextParentId)
       : undefined;
+    const parentChanged = Boolean(editingCategory.parentId && editingCategory.parentId !== nextParentId);
 
     if (editingCategory.parentId && !nextParent) {
       toast({ title: "Error", description: "Please select a valid main category.", variant: "destructive" });
@@ -141,6 +283,7 @@ export default function CategoriesPage() {
           ? {
               parentId: nextParent?.id || "",
               parentName: nextParent?.name || "",
+              ...(parentChanged ? { sortOrder: getNextSortOrder(nextParent?.id) } : {}),
             }
           : {}),
         updatedAt: serverTimestamp(),
@@ -403,15 +546,73 @@ export default function CategoriesPage() {
         ) : (
           mainCategories.map((cat) => {
             const subCategories = getSubCategories(cat.id);
+            const isDragTarget = dragOverCategoryId === cat.id && draggingCategoryId !== cat.id;
+            const showMoveAbove = isDragTarget && dragOverPosition === "before";
+            const showMoveBelow = isDragTarget && dragOverPosition === "after";
 
             return (
               <div
                 key={cat.id}
-                className="bg-white border border-gray-200 rounded-xl px-4 py-4"
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                  handleDragEnter(cat.id, position);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                  handleDragEnter(cat.id, position);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+                  void handleDrop(cat.id, position);
+                }}
+                onDragEnd={handleDragEnd}
+                className={`relative bg-white border rounded-xl px-4 py-4 transition-all
+                  ${isDragTarget ? "border-blue-400 bg-blue-50/60 shadow-[0_0_0_3px_rgba(59,130,246,0.08)]" : "border-gray-200"}
+                  ${draggingCategoryId === cat.id ? "opacity-55 scale-[0.995]" : ""}`}
               >
+                {showMoveAbove && (
+                  <div className="absolute inset-x-4 -top-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
+                    <div className="h-0.5 flex-1 rounded-full bg-blue-500" />
+                    <span className="rounded-full bg-white/95 px-2 py-1 shadow-sm ring-1 ring-blue-200">Move Above</span>
+                    <div className="h-0.5 flex-1 rounded-full bg-blue-500" />
+                  </div>
+                )}
+
+                {showMoveBelow && (
+                  <div className="absolute inset-x-4 -bottom-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-600">
+                    <div className="h-0.5 flex-1 rounded-full bg-blue-500" />
+                    <span className="rounded-full bg-white/95 px-2 py-1 shadow-sm ring-1 ring-blue-200">Move Below</span>
+                    <div className="h-0.5 flex-1 rounded-full bg-blue-500" />
+                  </div>
+                )}
+
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        draggable={!reordering}
+                        onDragStart={(event) => {
+                          event.stopPropagation();
+                          event.dataTransfer.effectAllowed = "move";
+                          handleDragStart(cat.id);
+                        }}
+                        onDragEnd={(event) => {
+                          event.stopPropagation();
+                          handleDragEnd();
+                        }}
+                        className="rounded-md border border-gray-200 bg-gray-50 p-1.5 text-gray-400 cursor-grab active:cursor-grabbing hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                        aria-label={`Drag ${cat.name}`}
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="w-4 h-4" />
+                      </button>
                       <FolderTree className="w-4 h-4 text-blue-500" />
                       <span className="font-semibold text-gray-900">{cat.name}</span>
                     </div>
@@ -446,8 +647,44 @@ export default function CategoriesPage() {
                     {subCategories.map((subCategory) => (
                       <div
                         key={subCategory.id}
-                        className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-sm text-blue-700"
+                        onDragEnter={(event: DragEvent<HTMLDivElement>) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          handleDragEnter(subCategory.id, "before");
+                        }}
+                        onDragOver={(event: DragEvent<HTMLDivElement>) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                        }}
+                        onDrop={(event: DragEvent<HTMLDivElement>) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void handleDrop(subCategory.id, "before");
+                        }}
+                        className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition
+                          ${dragOverCategoryId === subCategory.id && draggingCategoryId !== subCategory.id
+                            ? "border-blue-400 bg-blue-100 text-blue-700 shadow-sm"
+                            : "border-blue-200 bg-blue-50 text-blue-700"}
+                          ${draggingCategoryId === subCategory.id ? "opacity-60" : ""}`}
                       >
+                        <button
+                          type="button"
+                          draggable={!reordering}
+                          onDragStart={(event) => {
+                            event.stopPropagation();
+                            event.dataTransfer.effectAllowed = "move";
+                            handleDragStart(subCategory.id);
+                          }}
+                          onDragEnd={(event) => {
+                            event.stopPropagation();
+                            handleDragEnd();
+                          }}
+                          className="rounded-full text-blue-400 cursor-grab active:cursor-grabbing hover:text-blue-600"
+                          aria-label={`Drag ${subCategory.name}`}
+                          title="Drag to reorder"
+                        >
+                          <GripVertical className="w-3.5 h-3.5" />
+                        </button>
                         <Tag className="w-3.5 h-3.5" />
                         <span>{subCategory.name}</span>
                         <button
