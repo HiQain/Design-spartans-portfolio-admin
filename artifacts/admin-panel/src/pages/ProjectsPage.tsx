@@ -115,6 +115,15 @@ async function fileToEmbeddedImage(file: File) {
   return await readFileAsDataUrl(new File([blob], `${file.name}.webp`, { type: "image/webp" }));
 }
 
+interface BulkProjectRow {
+  id: string;
+  file: File;
+  preview: string;
+  title: string;
+  description: string;
+  link: string;
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -134,6 +143,16 @@ export default function ProjectsPage() {
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formCardRef = useRef<HTMLDivElement>(null);
+
+  const [showBulkForm, setShowBulkForm] = useState(false);
+  const [bulkMainCategoryId, setBulkMainCategoryId] = useState("");
+  const [bulkSubCategoryId, setBulkSubCategoryId] = useState("");
+  const [bulkRows, setBulkRows] = useState<BulkProjectRow[]>([]);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ current: number; total: number } | null>(null);
+  const bulkFileInputRef = useRef<HTMLInputElement>(null);
+  const bulkFormCardRef = useRef<HTMLDivElement>(null);
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -150,6 +169,9 @@ export default function ProjectsPage() {
   const mainCategories = categories.filter((cat) => !cat.parentId);
   const availableSubCategories = categories.filter((cat) => cat.parentId === mainCategoryId);
   const requiresSubCategory = mainCategoryId !== "" && availableSubCategories.length > 0;
+
+  const bulkAvailableSubCategories = categories.filter((cat) => cat.parentId === bulkMainCategoryId);
+  const bulkRequiresSubCategory = bulkMainCategoryId !== "" && bulkAvailableSubCategories.length > 0;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -284,6 +306,128 @@ export default function ProjectsPage() {
     });
   };
 
+  const resetBulkForm = () => {
+    bulkRows.forEach((row) => URL.revokeObjectURL(row.preview));
+    setBulkRows([]);
+    setBulkMainCategoryId("");
+    setBulkSubCategoryId("");
+    if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+    setShowBulkForm(false);
+  };
+
+  const handleBulkFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    const newRows: BulkProjectRow[] = [];
+
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        toast({ title: "Invalid file", description: `${file.name} is not an image file.`, variant: "destructive" });
+        continue;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toast({ title: "File too large", description: `${file.name} is over 5MB.`, variant: "destructive" });
+        continue;
+      }
+      newRows.push({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+        file,
+        preview: URL.createObjectURL(file),
+        title: "",
+        description: "",
+        link: "",
+      });
+    }
+
+    setBulkRows((prev) => [...prev, ...newRows]);
+    if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+  };
+
+  const removeBulkRow = (id: string) => {
+    setBulkRows((prev) => {
+      const target = prev.find((row) => row.id === id);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((row) => row.id !== id);
+    });
+  };
+
+  const updateBulkRow = (id: string, patch: Partial<Pick<BulkProjectRow, "title" | "description" | "link">>) => {
+    setBulkRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
+
+  const addBulkProjects = async () => {
+    if (bulkRows.length === 0) return;
+
+    if (bulkRequiresSubCategory && !bulkSubCategoryId) {
+      toast({
+        title: "Subcategory required",
+        description: "Please select a subcategory for this main category.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const incomplete = bulkRows.some((row) => !row.title.trim() || !row.link.trim());
+    if (incomplete) {
+      toast({
+        title: "Missing fields",
+        description: "Every project needs a title and a link.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setBulkSaving(true);
+    setBulkProgress({ current: 0, total: bulkRows.length });
+
+    const mainCategory = categories.find((c) => c.id === bulkMainCategoryId);
+    const subCategory = categories.find((c) => c.id === bulkSubCategoryId);
+    const selectedCategory = subCategory ?? mainCategory;
+
+    let uploaded = 0;
+    let failed = 0;
+
+    for (const row of bulkRows) {
+      try {
+        const finalImageUrl = await fileToEmbeddedImage(row.file);
+        await addDoc(collection(db, "projects"), {
+          title: row.title.trim(),
+          description: row.description.trim(),
+          link: row.link.trim(),
+          imageUrl: finalImageUrl,
+          categoryId: selectedCategory?.id || "",
+          categoryName: selectedCategory?.name || "",
+          mainCategoryId: mainCategory?.id || "",
+          mainCategoryName: mainCategory?.name || "",
+          subCategoryId: subCategory?.id || "",
+          subCategoryName: subCategory?.name || "",
+          createdAt: serverTimestamp(),
+        });
+        uploaded += 1;
+      } catch {
+        failed += 1;
+      } finally {
+        setBulkProgress((prev) => (prev ? { ...prev, current: prev.current + 1 } : prev));
+      }
+    }
+
+    if (uploaded > 0) {
+      toast({
+        title: `${uploaded} project${uploaded === 1 ? "" : "s"} added successfully.`,
+        description: failed > 0 ? `${failed} project(s) failed to upload.` : undefined,
+      });
+    }
+
+    if (failed > 0 && uploaded === 0) {
+      toast({ title: "Error", description: "Failed to add projects.", variant: "destructive" });
+    }
+
+    setBulkSaving(false);
+    setBulkProgress(null);
+    resetBulkForm();
+  };
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredProjects = projects.filter((project) => {
     if (!normalizedQuery) return true;
@@ -307,19 +451,174 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Projects</h1>
           <p className="text-sm text-gray-500 mt-1">Manage portfolio projects published under {BRAND_NAME}</p>
         </div>
-        <Button
-          onClick={() => {
-            if (showForm && editingProjectId) {
-              resetForm();
-              return;
-            }
-            setShowForm(!showForm);
-          }}
-        >
-          <Plus className="w-4 h-4 mr-1" />
-          {showForm ? (editingProjectId ? "Close Editor" : "Hide Form") : "New Project"}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (showBulkForm) {
+                resetBulkForm();
+                return;
+              }
+              if (showForm) resetForm();
+              setShowBulkForm(true);
+            }}
+          >
+            <Upload className="w-4 h-4 mr-1" />
+            {showBulkForm ? "Hide Bulk Upload" : "Bulk Upload"}
+          </Button>
+          <Button
+            onClick={() => {
+              if (showForm && editingProjectId) {
+                resetForm();
+                return;
+              }
+              if (showBulkForm) resetBulkForm();
+              setShowForm(!showForm);
+            }}
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            {showForm ? (editingProjectId ? "Close Editor" : "Hide Form") : "New Project"}
+          </Button>
+        </div>
       </div>
+
+      {showBulkForm && (
+        <Card ref={bulkFormCardRef}>
+          <CardHeader>
+            <CardTitle className="text-base">Bulk Add Projects</CardTitle>
+            <p className="text-sm text-gray-500">
+              Select multiple images to create one project per image, all under the same category. Each project keeps its own title, description, and link.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="bulk-main-cat">Main Category</Label>
+              <select
+                id="bulk-main-cat"
+                value={bulkMainCategoryId}
+                onChange={(e) => {
+                  setBulkMainCategoryId(e.target.value);
+                  setBulkSubCategoryId("");
+                }}
+                className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                <option value="">— Select a main category —</option>
+                {mainCategories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {bulkMainCategoryId && bulkAvailableSubCategories.length > 0 && (
+              <div>
+                <Label htmlFor="bulk-sub-cat">Subcategory <span className="text-red-500">*</span></Label>
+                <select
+                  id="bulk-sub-cat"
+                  value={bulkSubCategoryId}
+                  onChange={(e) => setBulkSubCategoryId(e.target.value)}
+                  className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">— Select a subcategory —</option>
+                  {bulkAvailableSubCategories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <Label>Project Images</Label>
+              <input
+                ref={bulkFileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleBulkFilesChange}
+                className="hidden"
+                id="bulk-image-upload"
+              />
+              <label
+                htmlFor="bulk-image-upload"
+                className="mt-2 flex h-24 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 transition-colors hover:border-blue-400 hover:bg-blue-50"
+              >
+                <ImageIcon className="w-6 h-6 text-gray-300 mb-1" />
+                <p className="text-sm text-gray-500">
+                  {bulkRows.length > 0 ? `Add more images (${bulkRows.length} selected)` : "Click to select multiple images"}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">PNG, JPG, GIF, WebP — max 5MB each</p>
+              </label>
+            </div>
+
+            {bulkRows.length > 0 && (
+              <div className="space-y-3">
+                {bulkRows.map((row, index) => (
+                  <div key={row.id} className="flex gap-3 rounded-lg border border-gray-200 p-3">
+                    <img
+                      src={row.preview}
+                      alt={row.file.name}
+                      className="h-24 w-24 shrink-0 rounded-md object-cover border border-gray-200"
+                    />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <Input
+                        placeholder={`Title for project ${index + 1}...`}
+                        value={row.title}
+                        onChange={(e) => updateBulkRow(row.id, { title: e.target.value })}
+                      />
+                      <Input
+                        placeholder="https://..."
+                        value={row.link}
+                        onChange={(e) => updateBulkRow(row.id, { link: e.target.value })}
+                      />
+                      <Textarea
+                        placeholder="Brief description..."
+                        value={row.description}
+                        onChange={(e) => updateBulkRow(row.id, { description: e.target.value })}
+                        className="resize-none"
+                        rows={2}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeBulkRow(row.id)}
+                      className="shrink-0 self-start text-gray-400 hover:text-red-500"
+                      aria-label={`Remove ${row.file.name}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {bulkProgress && (
+              <p className="text-sm text-gray-500">
+                Uploading {bulkProgress.current} of {bulkProgress.total}...
+              </p>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                onClick={addBulkProjects}
+                disabled={
+                  bulkSaving ||
+                  bulkRows.length === 0 ||
+                  (bulkRequiresSubCategory && !bulkSubCategoryId)
+                }
+              >
+                {bulkSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {bulkProgress ? `Uploading ${bulkProgress.current}/${bulkProgress.total}...` : "Uploading..."}
+                  </>
+                ) : (
+                  `Upload ${bulkRows.length || ""} Project${bulkRows.length === 1 ? "" : "s"}`
+                )}
+              </Button>
+              <Button variant="outline" onClick={resetBulkForm}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {showForm && (
         <Card ref={formCardRef}>

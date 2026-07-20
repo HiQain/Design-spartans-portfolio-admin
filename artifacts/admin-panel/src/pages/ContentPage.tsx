@@ -112,6 +112,12 @@ async function fileToEmbeddedImage(file: File) {
   return await readFileAsDataUrl(new File([blob], `${file.name}.webp`, { type: "image/webp" }));
 }
 
+interface PendingFile {
+  id: string;
+  file: File;
+  preview: string;
+}
+
 export default function ContentPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
@@ -120,8 +126,10 @@ export default function ContentPage() {
   const [subCategoryId, setSubCategoryId] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [savingMedia, setSavingMedia] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [editingMediaId, setEditingMediaId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formCardRef = useRef<HTMLDivElement>(null);
@@ -150,6 +158,8 @@ export default function ContentPage() {
   const clearMedia = () => {
     setMediaFile(null);
     setMediaPreview("");
+    pendingFiles.forEach((pending) => URL.revokeObjectURL(pending.preview));
+    setPendingFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -162,34 +172,72 @@ export default function ContentPage() {
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
 
-    if (!file) return;
+    if (files.length === 0) return;
 
-    if (!file.type.startsWith("image/")) {
-      toast({
-        title: "Invalid file",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
+    const validFiles: File[] = [];
+
+    for (const file of files) {
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Invalid file",
+          description: `${file.name} is not an image file.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: `${file.name} is over 5MB.`,
+          variant: "destructive",
+        });
+        continue;
+      }
+
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Image must be under 5MB.",
-        variant: "destructive",
-      });
-      return;
+    if (editingMediaId || validFiles.length === 1) {
+      const file = validFiles[0];
+      setMediaFile(file);
+      setMediaPreview(URL.createObjectURL(file));
+      setPendingFiles([]);
+    } else {
+      setMediaFile(null);
+      setMediaPreview("");
+      setPendingFiles(
+        validFiles.map((file) => ({
+          id: `${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+          file,
+          preview: URL.createObjectURL(file),
+        })),
+      );
     }
 
-    setMediaFile(file);
-    setMediaPreview(URL.createObjectURL(file));
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const removePendingFile = (id: string) => {
+    setPendingFiles((prev) => {
+      const target = prev.find((pending) => pending.id === id);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((pending) => pending.id !== id);
+    });
+  };
+
+  const isBulkUpload = !editingMediaId && pendingFiles.length > 0;
+  const hasSelectedMedia = Boolean(mediaFile) || pendingFiles.length > 0;
+
   const handleSaveMedia = async () => {
-    if (!mainCategoryId || (!editingMediaId && !mediaFile)) {
+    if (!mainCategoryId || (!editingMediaId && !hasSelectedMedia)) {
       toast({
         title: "Missing fields",
         description: "Category and image are required.",
@@ -209,38 +257,78 @@ export default function ContentPage() {
 
     setSavingMedia(true);
 
+    const mainCategory = categories.find((category) => category.id === mainCategoryId);
+    const subCategory = categories.find((category) => category.id === subCategoryId);
+    const selectedCategory = subCategory ?? mainCategory;
+
+    const basePayload = {
+      categoryId: selectedCategory?.id ?? "",
+      categoryName: selectedCategory?.name ?? "",
+      mainCategoryId: mainCategory?.id ?? "",
+      mainCategoryName: mainCategory?.name ?? "",
+      subCategoryId: subCategory?.id ?? "",
+      subCategoryName: subCategory?.name ?? "",
+    };
+
     try {
-      const imageUrl = mediaFile ? await fileToEmbeddedImage(mediaFile) : mediaPreview;
-      const mainCategory = categories.find((category) => category.id === mainCategoryId);
-      const subCategory = categories.find((category) => category.id === subCategoryId);
-      const selectedCategory = subCategory ?? mainCategory;
+      if (isBulkUpload) {
+        let uploaded = 0;
+        let failed = 0;
+        setUploadProgress({ current: 0, total: pendingFiles.length });
 
-      const payload = {
-        title: mediaTitle.trim(),
-        imageUrl,
-        categoryId: selectedCategory?.id ?? "",
-        categoryName: selectedCategory?.name ?? "",
-        mainCategoryId: mainCategory?.id ?? "",
-        mainCategoryName: mainCategory?.name ?? "",
-        subCategoryId: subCategory?.id ?? "",
-        subCategoryName: subCategory?.name ?? "",
-      };
+        for (const pending of pendingFiles) {
+          try {
+            const imageUrl = await fileToEmbeddedImage(pending.file);
+            await addDoc(collection(db, "media"), {
+              ...basePayload,
+              title: mediaTitle.trim(),
+              imageUrl,
+              createdAt: serverTimestamp(),
+            });
+            uploaded += 1;
+          } catch {
+            failed += 1;
+          } finally {
+            setUploadProgress((prev) => (prev ? { ...prev, current: prev.current + 1 } : prev));
+          }
+        }
 
-      if (editingMediaId) {
-        await updateDoc(doc(db, "media", editingMediaId), {
-          ...payload,
-          updatedAt: serverTimestamp(),
-        });
-        toast({ title: "Media updated successfully." });
+        if (uploaded > 0) {
+          toast({
+            title: `${uploaded} media item${uploaded === 1 ? "" : "s"} uploaded successfully.`,
+            description: failed > 0 ? `${failed} file(s) failed to upload.` : undefined,
+          });
+        }
+
+        if (failed > 0 && uploaded === 0) {
+          toast({
+            title: "Error",
+            description: "Failed to upload media.",
+            variant: "destructive",
+          });
+        }
+
+        resetMediaForm();
       } else {
-        await addDoc(collection(db, "media"), {
-          ...payload,
-          createdAt: serverTimestamp(),
-        });
-        toast({ title: "Media uploaded successfully." });
-      }
+        const imageUrl = mediaFile ? await fileToEmbeddedImage(mediaFile) : mediaPreview;
+        const payload = { ...basePayload, title: mediaTitle.trim(), imageUrl };
 
-      resetMediaForm();
+        if (editingMediaId) {
+          await updateDoc(doc(db, "media", editingMediaId), {
+            ...payload,
+            updatedAt: serverTimestamp(),
+          });
+          toast({ title: "Media updated successfully." });
+        } else {
+          await addDoc(collection(db, "media"), {
+            ...payload,
+            createdAt: serverTimestamp(),
+          });
+          toast({ title: "Media uploaded successfully." });
+        }
+
+        resetMediaForm();
+      }
     } catch (error) {
       toast({
         title: "Error",
@@ -249,6 +337,7 @@ export default function ContentPage() {
       });
     } finally {
       setSavingMedia(false);
+      setUploadProgress(null);
     }
   };
 
@@ -272,6 +361,8 @@ export default function ContentPage() {
     setSubCategoryId(item.subCategoryId || "");
     setMediaPreview(item.imageUrl || "");
     setMediaFile(null);
+    pendingFiles.forEach((pending) => URL.revokeObjectURL(pending.preview));
+    setPendingFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
     formCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -304,13 +395,18 @@ export default function ContentPage() {
           <CardTitle className="text-base">
             {editingMediaId ? "Edit Media" : "Upload Media"}
           </CardTitle>
+          {!editingMediaId && (
+            <p className="text-sm text-gray-500">
+              Select multiple images to bulk upload them all under the same category.
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="media-title">Media Title</Label>
             <Input
               id="media-title"
-              placeholder="Optional media title..."
+              placeholder={isBulkUpload ? "Optional title applied to all uploads..." : "Optional media title..."}
               value={mediaTitle}
               onChange={(event) => setMediaTitle(event.target.value)}
               className="mt-1"
@@ -357,23 +453,55 @@ export default function ContentPage() {
           )}
 
           <div>
-            <Label>Media File</Label>
+            <Label>{editingMediaId ? "Media File" : "Media File(s)"}</Label>
             <input
               ref={fileInputRef}
               id="media-upload"
               type="file"
               accept="image/*"
+              multiple={!editingMediaId}
               className="hidden"
               onChange={handleFileChange}
             />
 
-            {!mediaPreview ? (
+            {pendingFiles.length > 0 ? (
+              <div className="mt-2">
+                <label
+                  htmlFor="media-upload"
+                  className="mb-3 flex h-20 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 transition-colors hover:border-blue-400 hover:bg-blue-50"
+                >
+                  <Upload className="mb-1 h-5 w-5 text-gray-300" />
+                  <p className="text-xs text-gray-500">Add more images ({pendingFiles.length} selected)</p>
+                </label>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {pendingFiles.map((pending) => (
+                    <div key={pending.id} className="group relative overflow-hidden rounded-lg border border-gray-200">
+                      <img
+                        src={pending.preview}
+                        alt={pending.file.name}
+                        className="h-24 w-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePendingFile(pending.id)}
+                        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-label={`Remove ${pending.file.name}`}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : !mediaPreview ? (
               <label
                 htmlFor="media-upload"
                 className="mt-2 flex h-36 w-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 transition-colors hover:border-blue-400 hover:bg-blue-50"
               >
                 <Upload className="mb-2 h-8 w-8 text-gray-300" />
-                <p className="text-sm text-gray-600">Click to upload media</p>
+                <p className="text-sm text-gray-600">
+                  {editingMediaId ? "Click to upload media" : "Click to upload media (select multiple to bulk upload)"}
+                </p>
                 <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF, WebP up to 5MB</p>
               </label>
             ) : (
@@ -387,18 +515,32 @@ export default function ContentPage() {
             )}
           </div>
 
+          {uploadProgress && (
+            <p className="text-sm text-gray-500">
+              Uploading {uploadProgress.current} of {uploadProgress.total}...
+            </p>
+          )}
+
           <div className="flex gap-2">
             <Button
               onClick={handleSaveMedia}
-              disabled={savingMedia || !mainCategoryId || (!editingMediaId && !mediaFile) || (requiresSubCategory && !subCategoryId)}
+              disabled={savingMedia || !mainCategoryId || (!editingMediaId && !hasSelectedMedia) || (requiresSubCategory && !subCategoryId)}
             >
               {savingMedia ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {editingMediaId ? "Saving..." : "Uploading..."}
+                  {editingMediaId
+                    ? "Saving..."
+                    : uploadProgress
+                      ? `Uploading ${uploadProgress.current}/${uploadProgress.total}...`
+                      : "Uploading..."}
                 </>
+              ) : editingMediaId ? (
+                "Update Media"
+              ) : isBulkUpload ? (
+                `Upload ${pendingFiles.length} Files`
               ) : (
-                editingMediaId ? "Update Media" : "Save Media"
+                "Save Media"
               )}
             </Button>
             <Button variant="outline" onClick={resetMediaForm}>
