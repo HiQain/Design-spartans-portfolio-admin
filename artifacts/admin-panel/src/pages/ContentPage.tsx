@@ -403,17 +403,6 @@ export default function ContentPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="media-title">Media Title</Label>
-            <Input
-              id="media-title"
-              placeholder={isBulkUpload ? "Optional title applied to all uploads..." : "Optional media title..."}
-              value={mediaTitle}
-              onChange={(event) => setMediaTitle(event.target.value)}
-              className="mt-1"
-            />
-          </div>
-
-          <div>
             <Label htmlFor="media-main-category">Main Category</Label>
             <select
               id="media-main-category"
@@ -570,7 +559,7 @@ export default function ContentPage() {
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
             {filteredMediaItems.map((item) => (
-              <div key={item.id} className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
+              <div key={item.id} className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-md">
                 {item.imageUrl && (
                   <img
                     src={item.imageUrl}
@@ -581,16 +570,13 @@ export default function ContentPage() {
                     }}
                   />
                 )}
-                <div className="flex flex-1 flex-col justify-between gap-2 p-3">
-                  <div className="min-w-0">
-                    <h3 className="truncate font-semibold text-gray-900">{item.title || "Untitled Media"}</h3>
-                    <span className="mt-1 inline-block max-w-full truncate rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                      {item.mainCategoryName && item.subCategoryName
-                        ? `${item.mainCategoryName} / ${item.subCategoryName}`
-                        : item.categoryName || "Uncategorized"}
-                    </span>
-                  </div>
-                  <div className="flex justify-end gap-1">
+                <div className="flex items-center justify-between gap-2 p-3">
+                  <span className="inline-block min-w-0 max-w-full truncate rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                    {item.mainCategoryName && item.subCategoryName
+                      ? `${item.mainCategoryName} / ${item.subCategoryName}`
+                      : item.categoryName || "Uncategorized"}
+                  </span>
+                  <div className="flex shrink-0 gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
