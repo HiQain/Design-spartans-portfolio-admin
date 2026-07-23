@@ -390,7 +390,7 @@ export default function ContentPage() {
         </p>
       </div>
 
-      <Card ref={formCardRef}>
+      <Card ref={formCardRef} className="max-w-2xl">
         <CardHeader>
           <CardTitle className="text-base">
             {editingMediaId ? "Edit Media" : "Upload Media"}
@@ -568,48 +568,50 @@ export default function ContentPage() {
             <p>{mediaItems.length === 0 ? "No media uploaded yet." : "No matching content found."}</p>
           </div>
         ) : (
-          filteredMediaItems.map((item) => (
-            <div key={item.id} className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-              {item.imageUrl && (
-                <img
-                  src={item.imageUrl}
-                  alt={item.title}
-                  className="h-48 w-full object-cover"
-                  onError={(event) => {
-                    (event.target as HTMLImageElement).style.display = "none";
-                  }}
-                />
-              )}
-              <div className="flex items-start justify-between gap-3 p-4">
-                <div className="min-w-0">
-                  <h3 className="font-semibold text-gray-900">{item.title || "Untitled Media"}</h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    {item.mainCategoryName && item.subCategoryName
-                      ? `${item.mainCategoryName} / ${item.subCategoryName}`
-                      : item.categoryName || "Uncategorized"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                    onClick={() => handleEditMedia(item)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:bg-red-50 hover:text-red-700"
-                    onClick={() => handleDeleteMedia(item.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+            {filteredMediaItems.map((item) => (
+              <div key={item.id} className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
+                {item.imageUrl && (
+                  <img
+                    src={item.imageUrl}
+                    alt={item.title}
+                    className="h-40 w-full object-cover"
+                    onError={(event) => {
+                      (event.target as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                )}
+                <div className="flex flex-1 flex-col justify-between gap-2 p-3">
+                  <div className="min-w-0">
+                    <h3 className="truncate font-semibold text-gray-900">{item.title || "Untitled Media"}</h3>
+                    <span className="mt-1 inline-block max-w-full truncate rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                      {item.mainCategoryName && item.subCategoryName
+                        ? `${item.mainCategoryName} / ${item.subCategoryName}`
+                        : item.categoryName || "Uncategorized"}
+                    </span>
+                  </div>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                      onClick={() => handleEditMedia(item)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:bg-red-50 hover:text-red-700"
+                      onClick={() => handleDeleteMedia(item.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>

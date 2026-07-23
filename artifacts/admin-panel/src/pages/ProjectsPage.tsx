@@ -483,7 +483,7 @@ export default function ProjectsPage() {
       </div>
 
       {showBulkForm && (
-        <Card ref={bulkFormCardRef}>
+        <Card ref={bulkFormCardRef} className="max-w-2xl">
           <CardHeader>
             <CardTitle className="text-base">Bulk Add Projects</CardTitle>
             <p className="text-sm text-gray-500">
@@ -621,7 +621,7 @@ export default function ProjectsPage() {
       )}
 
       {showForm && (
-        <Card ref={formCardRef}>
+        <Card ref={formCardRef} className="max-w-2xl">
           <CardHeader>
             <CardTitle className="text-base">
               {editingProjectId ? "Edit Project" : "Project Details"}
@@ -813,23 +813,23 @@ export default function ProjectsPage() {
             <p>{projects.length === 0 ? "No projects yet. Add your first one above." : "No matching projects found."}</p>
           </div>
         ) : (
-          filteredProjects.map((proj) => (
-            <div key={proj.id} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              {proj.imageUrl && (
-                <img
-                  src={proj.imageUrl}
-                  alt={proj.title}
-                  className="w-full h-44 object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-              )}
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-gray-900">{proj.title}</h3>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+            {filteredProjects.map((proj) => (
+              <div key={proj.id} className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
+                {proj.imageUrl && (
+                  <img
+                    src={proj.imageUrl}
+                    alt={proj.title}
+                    className="w-full h-40 object-cover"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                )}
+                <div className="flex flex-1 flex-col justify-between gap-2 p-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-col items-start gap-1">
+                      <h3 className="w-full truncate font-semibold text-gray-900">{proj.title}</h3>
                       {proj.categoryName && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                        <span className="inline-block max-w-full truncate rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
                           {proj.mainCategoryName && proj.subCategoryName
                             ? `${proj.mainCategoryName} / ${proj.subCategoryName}`
                             : proj.categoryName}
@@ -837,38 +837,40 @@ export default function ProjectsPage() {
                       )}
                     </div>
                     {proj.description && (
-                      <p className="text-sm text-gray-500 mt-1">{proj.description}</p>
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">{proj.description}</p>
                     )}
                     <a
                       href={proj.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-2"
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-2 truncate"
                     >
-                      <ExternalLink className="w-3 h-3" />
-                      {proj.link}
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{proj.link}</span>
                     </a>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 shrink-0"
-                    onClick={() => editProject(proj)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
-                    onClick={() => deleteProject(proj.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 shrink-0"
+                      onClick={() => editProject(proj)}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50 shrink-0"
+                      onClick={() => deleteProject(proj.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
     </div>

@@ -162,7 +162,7 @@ function App() {
           </div>
         </header>
 
-        <main className="flex-1 p-6 max-w-3xl w-full mx-auto">
+        <main className="flex-1 p-6 w-full">
           {pageMap[page]}
         </main>
       </div>
