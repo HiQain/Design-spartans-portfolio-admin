@@ -1,118 +1,29 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  collection,
-  addDoc,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+  useListCategories,
+  useListProjects,
+  useCreateProject,
+  useUpdateProject,
+  useDeleteProject,
+  getListProjectsQueryKey,
+  type Project,
+} from "@workspace/api-client-react";
+import { uploadImage } from "@/lib/uploads";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BRAND_NAME } from "@/lib/branding";
-import { Trash2, Plus, FolderOpen, ExternalLink, Upload, Link, ImageIcon, X, Loader2, Pencil } from "lucide-react";
+import { Trash2, Plus, FolderOpen, ExternalLink, Upload, Link, ImageIcon, X, Loader2, Pencil, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface Category {
-  id: string;
-  name: string;
-  parentId?: string;
-  parentName?: string;
-}
-
-interface Project {
-  id: string;
-  title: string;
-  description: string;
-  link: string;
-  imageUrl: string;
-  categoryId: string;
-  categoryName: string;
-  mainCategoryId?: string;
-  mainCategoryName?: string;
-  subCategoryId?: string;
-  subCategoryName?: string;
-  createdAt: any;
-}
-
 type ImageMode = "upload" | "url";
-const MAX_EMBEDDED_IMAGE_BYTES = 700 * 1024;
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  return "Failed to add project. Please try again.";
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Image file could not be read."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Image preview could not be generated."));
-    image.src = src;
-  });
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error("Image compression failed."));
-          return;
-        }
-        resolve(blob);
-      },
-      "image/webp",
-      quality,
-    );
-  });
-}
-
-async function fileToEmbeddedImage(file: File) {
-  const dataUrl = await readFileAsDataUrl(file);
-  const sourceImage = await loadImage(dataUrl);
-  const maxDimension = 1600;
-  const scale = Math.min(1, maxDimension / Math.max(sourceImage.width, sourceImage.height));
-  const canvas = document.createElement("canvas");
-
-  canvas.width = Math.max(1, Math.round(sourceImage.width * scale));
-  canvas.height = Math.max(1, Math.round(sourceImage.height * scale));
-
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    throw new Error("Image processing is not supported in this browser.");
-  }
-
-  context.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
-
-  let quality = 0.9;
-  let blob = await canvasToBlob(canvas, quality);
-
-  while (blob.size > MAX_EMBEDDED_IMAGE_BYTES && quality > 0.4) {
-    quality -= 0.1;
-    blob = await canvasToBlob(canvas, quality);
-  }
-
-  if (blob.size > MAX_EMBEDDED_IMAGE_BYTES) {
-    throw new Error("Image is still too large after compression. Please use a smaller image.");
-  }
-
-  return await readFileAsDataUrl(new File([blob], `${file.name}.webp`, { type: "image/webp" }));
+  return "Failed to save project. Please try again.";
 }
 
 interface BulkProjectRow {
@@ -125,8 +36,20 @@ interface BulkProjectRow {
 }
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const queryClient = useQueryClient();
+  const { data: categoriesData } = useListCategories();
+  const categories = categoriesData ?? [];
+  // includeHidden: admins need to see (and un-hide) projects the daily link-check cron hid.
+  const { data: projectsData } = useListProjects({ includeHidden: true });
+  const projects = [...(projectsData ?? [])].sort((a, b) => b.createdAt - a.createdAt);
+
+  const createProjectMutation = useCreateProject();
+  const updateProjectMutation = useUpdateProject();
+  const deleteProjectMutation = useDeleteProject();
+
+  const invalidateProjects = () =>
+    queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey({ includeHidden: true }) });
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [link, setLink] = useState("");
@@ -137,7 +60,7 @@ export default function ProjectsPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
   const [uploading, setUploading] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -154,17 +77,6 @@ export default function ProjectsPage() {
   const bulkFormCardRef = useRef<HTMLDivElement>(null);
 
   const { toast } = useToast();
-
-  useEffect(() => {
-    const unsubProjects = onSnapshot(collection(db, "projects"), (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Project));
-      setProjects(data.sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds));
-    });
-    const unsubCats = onSnapshot(collection(db, "categories"), (snap) => {
-      setCategories(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category)));
-    });
-    return () => { unsubProjects(); unsubCats(); };
-  }, []);
 
   const mainCategories = categories.filter((cat) => !cat.parentId);
   const availableSubCategories = categories.filter((cat) => cat.parentId === mainCategoryId);
@@ -215,7 +127,7 @@ export default function ProjectsPage() {
       return;
     }
 
-    if (imageMode === "upload" && !imageFile) {
+    if (imageMode === "upload" && !imageFile && !editingProjectId) {
       toast({
         title: "Image required",
         description: "Please select an image file or switch to Image URL.",
@@ -224,15 +136,14 @@ export default function ProjectsPage() {
       return;
     }
 
-    setLoading(true);
-    let finalImageUrl = "";
+    setSaving(true);
+    let finalImageUrl = imageMode === "url" ? imageUrl.trim() : "";
 
     try {
       if (imageMode === "upload" && imageFile) {
         setUploading(true);
-        finalImageUrl = await fileToEmbeddedImage(imageFile);
-      } else if (imageMode === "url" && imageUrl.trim()) {
-        finalImageUrl = imageUrl.trim();
+        finalImageUrl = await uploadImage(imageFile);
+        setUploading(false);
       }
 
       const mainCategory = categories.find((c) => c.id === mainCategoryId);
@@ -243,29 +154,24 @@ export default function ProjectsPage() {
         title: title.trim(),
         description: description.trim(),
         link: link.trim(),
-        imageUrl: finalImageUrl,
-        categoryId: selectedCategory?.id || "",
-        categoryName: selectedCategory?.name || "",
-        mainCategoryId: mainCategory?.id || "",
-        mainCategoryName: mainCategory?.name || "",
-        subCategoryId: subCategory?.id || "",
-        subCategoryName: subCategory?.name || "",
+        imageUrl: finalImageUrl || undefined,
+        categoryId: selectedCategory?.id,
+        categoryName: selectedCategory?.name,
+        mainCategoryId: mainCategory?.id,
+        mainCategoryName: mainCategory?.name,
+        subCategoryId: subCategory?.id,
+        subCategoryName: subCategory?.name,
       };
 
       if (editingProjectId) {
-        await updateDoc(doc(db, "projects", editingProjectId), {
-          ...payload,
-          updatedAt: serverTimestamp(),
-        });
+        await updateProjectMutation.mutateAsync({ id: editingProjectId, data: payload });
         toast({ title: "Project updated successfully." });
       } else {
-        await addDoc(collection(db, "projects"), {
-          ...payload,
-          createdAt: serverTimestamp(),
-        });
+        await createProjectMutation.mutateAsync({ data: payload });
         toast({ title: "Project added successfully." });
       }
 
+      await invalidateProjects();
       resetForm();
     } catch (err) {
       toast({
@@ -275,13 +181,14 @@ export default function ProjectsPage() {
       });
     } finally {
       setUploading(false);
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   const deleteProject = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "projects", id));
+      await deleteProjectMutation.mutateAsync({ id });
+      await invalidateProjects();
       toast({ title: "Project deleted." });
     } catch {
       toast({ title: "Error", description: "Failed to delete project.", variant: "destructive" });
@@ -390,19 +297,20 @@ export default function ProjectsPage() {
 
     for (const row of bulkRows) {
       try {
-        const finalImageUrl = await fileToEmbeddedImage(row.file);
-        await addDoc(collection(db, "projects"), {
-          title: row.title.trim(),
-          description: row.description.trim(),
-          link: row.link.trim(),
-          imageUrl: finalImageUrl,
-          categoryId: selectedCategory?.id || "",
-          categoryName: selectedCategory?.name || "",
-          mainCategoryId: mainCategory?.id || "",
-          mainCategoryName: mainCategory?.name || "",
-          subCategoryId: subCategory?.id || "",
-          subCategoryName: subCategory?.name || "",
-          createdAt: serverTimestamp(),
+        const finalImageUrl = await uploadImage(row.file);
+        await createProjectMutation.mutateAsync({
+          data: {
+            title: row.title.trim(),
+            description: row.description.trim(),
+            link: row.link.trim(),
+            imageUrl: finalImageUrl,
+            categoryId: selectedCategory?.id,
+            categoryName: selectedCategory?.name,
+            mainCategoryId: mainCategory?.id,
+            mainCategoryName: mainCategory?.name,
+            subCategoryId: subCategory?.id,
+            subCategoryName: subCategory?.name,
+          },
         });
         uploaded += 1;
       } catch {
@@ -413,6 +321,7 @@ export default function ProjectsPage() {
     }
 
     if (uploaded > 0) {
+      await invalidateProjects();
       toast({
         title: `${uploaded} project${uploaded === 1 ? "" : "s"} added successfully.`,
         description: failed > 0 ? `${failed} project(s) failed to upload.` : undefined,
@@ -782,10 +691,10 @@ export default function ProjectsPage() {
             </div>
 
             <div className="flex gap-2 pt-2">
-              <Button onClick={addProject} disabled={loading || uploading || !title.trim() || !link.trim() || (requiresSubCategory && !subCategoryId)}>
+              <Button onClick={addProject} disabled={saving || uploading || !title.trim() || !link.trim() || (requiresSubCategory && !subCategoryId)}>
                 {uploading ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing image...</>
-                ) : loading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading image...</>
+                ) : saving ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</>
                 ) : editingProjectId ? "Update Project" : "Save Project"}
               </Button>
@@ -815,7 +724,7 @@ export default function ProjectsPage() {
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
             {filteredProjects.map((proj) => (
-              <div key={proj.id} className="flex flex-col bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <div key={proj.id} className={`flex flex-col bg-white border rounded-lg overflow-hidden ${proj.isHidden ? "border-amber-300" : "border-gray-200"}`}>
                 {proj.imageUrl && (
                   <img
                     src={proj.imageUrl}
@@ -828,26 +737,36 @@ export default function ProjectsPage() {
                   <div className="min-w-0">
                     <div className="flex flex-col items-start gap-1">
                       <h3 className="w-full truncate font-semibold text-gray-900">{proj.title}</h3>
-                      {proj.categoryName && (
-                        <span className="inline-block max-w-full truncate rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
-                          {proj.mainCategoryName && proj.subCategoryName
-                            ? `${proj.mainCategoryName} / ${proj.subCategoryName}`
-                            : proj.categoryName}
-                        </span>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {proj.categoryName && (
+                          <span className="inline-block max-w-full truncate rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                            {proj.mainCategoryName && proj.subCategoryName
+                              ? `${proj.mainCategoryName} / ${proj.subCategoryName}`
+                              : proj.categoryName}
+                          </span>
+                        )}
+                        {proj.isHidden && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                            <EyeOff className="w-3 h-3" />
+                            Hidden — dead link
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {proj.description && (
                       <p className="text-sm text-gray-500 mt-1 line-clamp-2">{proj.description}</p>
                     )}
-                    <a
-                      href={proj.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-2 truncate"
-                    >
-                      <ExternalLink className="w-3 h-3 shrink-0" />
-                      <span className="truncate">{proj.link}</span>
-                    </a>
+                    {proj.link && (
+                      <a
+                        href={proj.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mt-2 truncate"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{proj.link}</span>
+                      </a>
+                    )}
                   </div>
                   <div className="flex justify-end gap-1">
                     <Button

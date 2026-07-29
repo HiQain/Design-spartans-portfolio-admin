@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { onAuthStateChanged, signOut, type User } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { useAuth } from "@/hooks/use-auth";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import DashboardPage from "@/pages/DashboardPage";
@@ -32,25 +31,16 @@ const navItems = [
 ];
 
 function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const { user, loading: authLoading, login, logout } = useAuth();
   const [page, setPage] = useState<Page>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setAuthLoading(false);
-    });
-    return unsub;
-  }, []);
 
   useEffect(() => {
     document.title = APP_TITLE;
   }, []);
 
-  const handleSignOut = async () => {
-    await signOut(auth);
+  const handleSignOut = () => {
+    logout();
     setPage("dashboard");
   };
 
@@ -65,7 +55,7 @@ function App() {
   if (!user) {
     return (
       <>
-        <LoginPage />
+        <LoginPage onLogin={login} />
         <Toaster />
       </>
     );
@@ -129,7 +119,7 @@ function App() {
         <div className="px-3 py-4 border-t border-gray-100 space-y-3">
           <div className="px-2">
             <p className="text-xs font-medium text-gray-700 truncate">{user.email}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Connected via Firebase</p>
+            <p className="text-xs text-gray-400 mt-0.5">Connected</p>
           </div>
           <Button
             variant="ghost"

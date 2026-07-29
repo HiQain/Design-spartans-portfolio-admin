@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { rm, writeFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
@@ -118,6 +118,28 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+
+  // `@workspace/db`/`@workspace/api-zod` are bundled directly into index.mjs above
+  // (they're not in `external`) - the only real runtime dependency left is `mysql2`
+  // (externalized because it does native/dynamic requires). Writing a minimal,
+  // workspace-free package.json here means `dist/` is a fully self-contained,
+  // deployable folder: copy it anywhere (e.g. a cPanel Node.js App root) and
+  // `npm install` just works, with no pnpm workspace to resolve.
+  await writeFile(
+    path.join(distDir, "package.json"),
+    JSON.stringify(
+      {
+        name: "api-server-dist",
+        private: true,
+        type: "module",
+        main: "index.mjs",
+        scripts: { start: "node --enable-source-maps index.mjs" },
+        dependencies: { mysql2: "^3.11.5" },
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 buildAll().catch((err) => {

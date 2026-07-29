@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  serverTimestamp,
-  updateDoc,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+  useListCategories,
+  useListMedia,
+  useCreateMedia,
+  useUpdateMedia,
+  useDeleteMedia,
+  getListMediaQueryKey,
+  type Media,
+} from "@workspace/api-client-react";
+import { uploadImage } from "@/lib/uploads";
 import { BRAND_NAME } from "@/lib/branding";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -17,99 +18,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ImageIcon, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 
-interface Category {
-  id: string;
-  name: string;
-  parentId?: string;
-}
-
-interface MediaItem {
-  id: string;
-  title: string;
-  imageUrl: string;
-  categoryId: string;
-  categoryName: string;
-  mainCategoryId?: string;
-  mainCategoryName?: string;
-  subCategoryId?: string;
-  subCategoryName?: string;
-  createdAt?: {
-    seconds?: number;
-  };
-}
-
-const MAX_EMBEDDED_IMAGE_BYTES = 700 * 1024;
+// No pagination in the admin view (matches the old realtime-listener behavior of
+// loading everything at once) - the collection is small enough that a high limit
+// effectively means "all of it".
+const ADMIN_MEDIA_LIMIT = 1000;
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
-}
-
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Media file could not be read."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Image preview could not be generated."));
-    image.src = src;
-  });
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error("Image compression failed."));
-          return;
-        }
-        resolve(blob);
-      },
-      "image/webp",
-      quality,
-    );
-  });
-}
-
-async function fileToEmbeddedImage(file: File) {
-  const dataUrl = await readFileAsDataUrl(file);
-  const sourceImage = await loadImage(dataUrl);
-  const maxDimension = 1600;
-  const scale = Math.min(1, maxDimension / Math.max(sourceImage.width, sourceImage.height));
-  const canvas = document.createElement("canvas");
-
-  canvas.width = Math.max(1, Math.round(sourceImage.width * scale));
-  canvas.height = Math.max(1, Math.round(sourceImage.height * scale));
-
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    throw new Error("Image processing is not supported in this browser.");
-  }
-
-  context.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
-
-  let quality = 0.9;
-  let blob = await canvasToBlob(canvas, quality);
-
-  while (blob.size > MAX_EMBEDDED_IMAGE_BYTES && quality > 0.4) {
-    quality -= 0.1;
-    blob = await canvasToBlob(canvas, quality);
-  }
-
-  if (blob.size > MAX_EMBEDDED_IMAGE_BYTES) {
-    throw new Error("Image is still too large after compression. Please use a smaller image.");
-  }
-
-  return await readFileAsDataUrl(new File([blob], `${file.name}.webp`, { type: "image/webp" }));
 }
 
 interface PendingFile {
@@ -119,8 +35,19 @@ interface PendingFile {
 }
 
 export default function ContentPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
+  const queryClient = useQueryClient();
+  const { data: categoriesData } = useListCategories();
+  const categories = categoriesData ?? [];
+  const { data: mediaPage } = useListMedia({ limit: ADMIN_MEDIA_LIMIT });
+  const mediaItems = [...(mediaPage?.items ?? [])].sort((a, b) => b.createdAt - a.createdAt);
+
+  const createMediaMutation = useCreateMedia();
+  const updateMediaMutation = useUpdateMedia();
+  const deleteMediaMutation = useDeleteMedia();
+
+  const invalidateMedia = () =>
+    queryClient.invalidateQueries({ queryKey: getListMediaQueryKey({ limit: ADMIN_MEDIA_LIMIT }) });
+
   const [mediaTitle, setMediaTitle] = useState("");
   const [mainCategoryId, setMainCategoryId] = useState("");
   const [subCategoryId, setSubCategoryId] = useState("");
@@ -134,22 +61,6 @@ export default function ContentPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formCardRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-
-  useEffect(() => {
-    const unsubCategories = onSnapshot(collection(db, "categories"), (snap) => {
-      setCategories(snap.docs.map((item) => ({ id: item.id, ...item.data() } as Category)));
-    });
-
-    const unsubMedia = onSnapshot(collection(db, "media"), (snap) => {
-      const data = snap.docs.map((item) => ({ id: item.id, ...item.data() } as MediaItem));
-      setMediaItems(data.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)));
-    });
-
-    return () => {
-      unsubCategories();
-      unsubMedia();
-    };
-  }, []);
 
   const mainCategories = categories.filter((category) => !category.parentId);
   const subCategories = categories.filter((category) => category.parentId === mainCategoryId);
@@ -262,12 +173,12 @@ export default function ContentPage() {
     const selectedCategory = subCategory ?? mainCategory;
 
     const basePayload = {
-      categoryId: selectedCategory?.id ?? "",
-      categoryName: selectedCategory?.name ?? "",
-      mainCategoryId: mainCategory?.id ?? "",
-      mainCategoryName: mainCategory?.name ?? "",
-      subCategoryId: subCategory?.id ?? "",
-      subCategoryName: subCategory?.name ?? "",
+      categoryId: selectedCategory?.id,
+      categoryName: selectedCategory?.name,
+      mainCategoryId: mainCategory?.id,
+      mainCategoryName: mainCategory?.name,
+      subCategoryId: subCategory?.id,
+      subCategoryName: subCategory?.name,
     };
 
     try {
@@ -278,12 +189,9 @@ export default function ContentPage() {
 
         for (const pending of pendingFiles) {
           try {
-            const imageUrl = await fileToEmbeddedImage(pending.file);
-            await addDoc(collection(db, "media"), {
-              ...basePayload,
-              title: mediaTitle.trim(),
-              imageUrl,
-              createdAt: serverTimestamp(),
+            const imageUrl = await uploadImage(pending.file);
+            await createMediaMutation.mutateAsync({
+              data: { ...basePayload, title: mediaTitle.trim(), imageUrl },
             });
             uploaded += 1;
           } catch {
@@ -294,6 +202,7 @@ export default function ContentPage() {
         }
 
         if (uploaded > 0) {
+          await invalidateMedia();
           toast({
             title: `${uploaded} media item${uploaded === 1 ? "" : "s"} uploaded successfully.`,
             description: failed > 0 ? `${failed} file(s) failed to upload.` : undefined,
@@ -310,23 +219,18 @@ export default function ContentPage() {
 
         resetMediaForm();
       } else {
-        const imageUrl = mediaFile ? await fileToEmbeddedImage(mediaFile) : mediaPreview;
+        const imageUrl = mediaFile ? await uploadImage(mediaFile) : mediaPreview;
         const payload = { ...basePayload, title: mediaTitle.trim(), imageUrl };
 
         if (editingMediaId) {
-          await updateDoc(doc(db, "media", editingMediaId), {
-            ...payload,
-            updatedAt: serverTimestamp(),
-          });
+          await updateMediaMutation.mutateAsync({ id: editingMediaId, data: payload });
           toast({ title: "Media updated successfully." });
         } else {
-          await addDoc(collection(db, "media"), {
-            ...payload,
-            createdAt: serverTimestamp(),
-          });
+          await createMediaMutation.mutateAsync({ data: payload });
           toast({ title: "Media uploaded successfully." });
         }
 
+        await invalidateMedia();
         resetMediaForm();
       }
     } catch (error) {
@@ -343,7 +247,8 @@ export default function ContentPage() {
 
   const handleDeleteMedia = async (id: string) => {
     try {
-      await deleteDoc(doc(db, "media", id));
+      await deleteMediaMutation.mutateAsync({ id });
+      await invalidateMedia();
       toast({ title: "Media deleted." });
     } catch {
       toast({
@@ -354,7 +259,7 @@ export default function ContentPage() {
     }
   };
 
-  const handleEditMedia = (item: MediaItem) => {
+  const handleEditMedia = (item: Media) => {
     setEditingMediaId(item.id);
     setMediaTitle(item.title ?? "");
     setMainCategoryId(item.mainCategoryId || item.categoryId || "");

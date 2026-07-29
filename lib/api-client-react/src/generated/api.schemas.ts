@@ -8,3 +8,148 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface ErrorResponse {
+  error: string;
+}
+
+export interface User {
+  id: number;
+  email: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface LoginResult {
+  token: string;
+  user: User;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  parentId?: string | null;
+  parentName?: string | null;
+  sortOrder: number;
+  layout?: string | null;
+  createdAt: number;
+  updatedAt?: number | null;
+}
+
+export interface CategoryCreateRequest {
+  name: string;
+  parentId?: string | null;
+  layout?: string | null;
+}
+
+export interface CategoryUpdateRequest {
+  name?: string;
+  parentId?: string | null;
+  layout?: string | null;
+}
+
+export interface CategoryReorderRequest {
+  parentId?: string | null;
+  orderedIds: string[];
+}
+
+export interface Project {
+  id: string;
+  title: string;
+  description?: string | null;
+  link?: string | null;
+  imageUrl?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  mainCategoryId?: string | null;
+  mainCategoryName?: string | null;
+  subCategoryId?: string | null;
+  subCategoryName?: string | null;
+  isHidden: boolean;
+  lastCheckedAt?: number | null;
+  createdAt: number;
+  updatedAt?: number | null;
+}
+
+export interface ProjectCreateRequest {
+  title: string;
+  description?: string | null;
+  link?: string | null;
+  imageUrl?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  mainCategoryId?: string | null;
+  mainCategoryName?: string | null;
+  subCategoryId?: string | null;
+  subCategoryName?: string | null;
+}
+
+export type ProjectUpdateRequest = ProjectCreateRequest;
+
+export interface Media {
+  id: string;
+  title: string;
+  description?: string | null;
+  link?: string | null;
+  imageUrl?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  mainCategoryId?: string | null;
+  mainCategoryName?: string | null;
+  subCategoryId?: string | null;
+  subCategoryName?: string | null;
+  createdAt: number;
+  updatedAt?: number | null;
+}
+
+export interface MediaCreateRequest {
+  title: string;
+  description?: string | null;
+  link?: string | null;
+  imageUrl?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  mainCategoryId?: string | null;
+  mainCategoryName?: string | null;
+  subCategoryId?: string | null;
+  subCategoryName?: string | null;
+}
+
+export type MediaUpdateRequest = MediaCreateRequest;
+
+export interface MediaPage {
+  items: Media[];
+  cursor: number | null;
+  hasMore: boolean;
+}
+
+export interface TopContent {
+  content?: string | null;
+  logoUrl?: string | null;
+  updatedAt?: number | null;
+}
+
+export interface TopContentUpdateRequest {
+  content?: string | null;
+  logoUrl?: string | null;
+}
+
+export interface Stats {
+  categoriesCount: number;
+  projectsCount: number;
+  mediaCount: number;
+}
+
+export type ListProjectsParams = {
+  mainCategoryId?: string;
+  includeHidden?: boolean;
+};
+
+export type ListMediaParams = {
+  mainCategoryId?: string;
+  cursor?: number;
+  limit?: number;
+};

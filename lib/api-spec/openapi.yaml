@@ -10,6 +10,370 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Auth operations
+  - name: categories
+    description: Category operations
+  - name: projects
+    description: Project operations
+  - name: media
+    description: Media operations
+  - name: top-content
+    description: Top content operations
+  - name: stats
+    description: Dashboard stats
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+      required:
+        - id
+        - email
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    LoginResult:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        parentId:
+          type: string
+          nullable: true
+        parentName:
+          type: string
+          nullable: true
+        sortOrder:
+          type: integer
+        layout:
+          type: string
+          nullable: true
+        createdAt:
+          type: integer
+        updatedAt:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - name
+        - sortOrder
+        - createdAt
+
+    CategoryCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        parentId:
+          type: string
+          nullable: true
+        layout:
+          type: string
+          nullable: true
+      required:
+        - name
+
+    CategoryUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        parentId:
+          type: string
+          nullable: true
+        layout:
+          type: string
+          nullable: true
+
+    CategoryReorderRequest:
+      type: object
+      properties:
+        parentId:
+          type: string
+          nullable: true
+        orderedIds:
+          type: array
+          items:
+            type: string
+      required:
+        - orderedIds
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+          nullable: true
+        categoryName:
+          type: string
+          nullable: true
+        mainCategoryId:
+          type: string
+          nullable: true
+        mainCategoryName:
+          type: string
+          nullable: true
+        subCategoryId:
+          type: string
+          nullable: true
+        subCategoryName:
+          type: string
+          nullable: true
+        isHidden:
+          type: boolean
+        lastCheckedAt:
+          type: integer
+          nullable: true
+        createdAt:
+          type: integer
+        updatedAt:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - title
+        - isHidden
+        - createdAt
+
+    ProjectCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+          nullable: true
+        categoryName:
+          type: string
+          nullable: true
+        mainCategoryId:
+          type: string
+          nullable: true
+        mainCategoryName:
+          type: string
+          nullable: true
+        subCategoryId:
+          type: string
+          nullable: true
+        subCategoryName:
+          type: string
+          nullable: true
+      required:
+        - title
+
+    ProjectUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/ProjectCreateRequest"
+
+    Media:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+          nullable: true
+        categoryName:
+          type: string
+          nullable: true
+        mainCategoryId:
+          type: string
+          nullable: true
+        mainCategoryName:
+          type: string
+          nullable: true
+        subCategoryId:
+          type: string
+          nullable: true
+        subCategoryName:
+          type: string
+          nullable: true
+        createdAt:
+          type: integer
+        updatedAt:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - title
+        - createdAt
+
+    MediaCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        link:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        categoryId:
+          type: string
+          nullable: true
+        categoryName:
+          type: string
+          nullable: true
+        mainCategoryId:
+          type: string
+          nullable: true
+        mainCategoryName:
+          type: string
+          nullable: true
+        subCategoryId:
+          type: string
+          nullable: true
+        subCategoryName:
+          type: string
+          nullable: true
+      required:
+        - title
+
+    MediaUpdateRequest:
+      allOf:
+        - $ref: "#/components/schemas/MediaCreateRequest"
+
+    MediaPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Media"
+        cursor:
+          type: integer
+          nullable: true
+        hasMore:
+          type: boolean
+      required:
+        - items
+        - cursor
+        - hasMore
+
+    TopContent:
+      type: object
+      properties:
+        content:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+        updatedAt:
+          type: integer
+          nullable: true
+
+    TopContentUpdateRequest:
+      type: object
+      properties:
+        content:
+          type: string
+          nullable: true
+        logoUrl:
+          type: string
+          nullable: true
+
+    Stats:
+      type: object
+      properties:
+        categoriesCount:
+          type: integer
+        projectsCount:
+          type: integer
+        mediaCount:
+          type: integer
+      required:
+        - categoriesCount
+        - projectsCount
+        - mediaCount
+
 paths:
   /healthz:
     get:
@@ -24,13 +388,374 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-components:
-  schemas:
-    HealthStatus:
-      type: object
-      properties:
-        status:
-          type: string
-      required:
-        - status
 
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Log in with email + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResult"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get the current authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [categories]
+      summary: List all categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create a category
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /categories/reorder:
+    put:
+      operationId: reorderCategories
+      tags: [categories]
+      summary: Bulk-update sortOrder for a sibling group (same parentId)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryReorderRequest"
+      responses:
+        "204":
+          description: Reordered
+
+  /categories/{id}:
+    put:
+      operationId: updateCategory
+      tags: [categories]
+      summary: Update a category
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CategoryUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete a category (and its direct children, if any)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List projects. Public callers never see hidden (dead-link) projects; authenticated callers may pass includeHidden=true for the admin view.
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - name: mainCategoryId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: includeHidden
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a project
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{id}:
+    put:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /media:
+    get:
+      operationId: listMedia
+      tags: [media]
+      summary: Cursor-paginated media list, filterable by category. Public callers get this same pagination; there is no hidden-media concept.
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - name: mainCategoryId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Media page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaPage"
+    post:
+      operationId: createMedia
+      tags: [media]
+      summary: Create a media item
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaCreateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+
+  /media/{id}:
+    put:
+      operationId: updateMedia
+      tags: [media]
+      summary: Update a media item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Media"
+    delete:
+      operationId: deleteMedia
+      tags: [media]
+      summary: Delete a media item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /top-content:
+    get:
+      operationId: getTopContent
+      tags: [top-content]
+      summary: Get the singleton top-content block
+      responses:
+        "200":
+          description: Top content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopContent"
+    put:
+      operationId: updateTopContent
+      tags: [top-content]
+      summary: Overwrite the singleton top-content block
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TopContentUpdateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopContent"
+
+  /stats:
+    get:
+      operationId: getStats
+      tags: [stats]
+      summary: Dashboard counts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Stats"
