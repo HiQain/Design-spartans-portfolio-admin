@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, text, boolean, bigint } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, text, boolean, int, bigint } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -18,6 +18,10 @@ export const projectsTable = mysqlTable("projects", {
   mainCategoryName: varchar("main_category_name", { length: 255 }),
   subCategoryId: varchar("sub_category_id", { length: 128 }),
   subCategoryName: varchar("sub_category_name", { length: 255 }),
+  // Lower sorts first within a (mainCategoryId, subCategoryId) group; ties (the
+  // common case - nothing manually reordered yet) break by createdAt DESC, so
+  // newly-created items naturally show up first without any special-casing.
+  sortOrder: int("sort_order").notNull().default(0),
   isHidden: boolean("is_hidden").notNull().default(false),
   lastCheckedAt: bigint("last_checked_at", { mode: "number" }),
   createdAt: bigint("created_at", { mode: "number" }).notNull(),

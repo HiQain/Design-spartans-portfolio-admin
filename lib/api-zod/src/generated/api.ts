@@ -126,6 +126,7 @@ export const ListProjectsResponseItem = zod.object({
   mainCategoryName: zod.string().nullish(),
   subCategoryId: zod.string().nullish(),
   subCategoryName: zod.string().nullish(),
+  sortOrder: zod.number(),
   isHidden: zod.boolean(),
   lastCheckedAt: zod.number().nullish(),
   createdAt: zod.number(),
@@ -147,6 +148,15 @@ export const CreateProjectBody = zod.object({
   mainCategoryName: zod.string().nullish(),
   subCategoryId: zod.string().nullish(),
   subCategoryName: zod.string().nullish(),
+});
+
+/**
+ * @summary Bulk-update sortOrder for a sibling group (same mainCategoryId/subCategoryId)
+ */
+export const ReorderProjectsBody = zod.object({
+  mainCategoryId: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  orderedIds: zod.array(zod.string()),
 });
 
 /**
@@ -181,6 +191,7 @@ export const UpdateProjectResponse = zod.object({
   mainCategoryName: zod.string().nullish(),
   subCategoryId: zod.string().nullish(),
   subCategoryName: zod.string().nullish(),
+  sortOrder: zod.number(),
   isHidden: zod.boolean(),
   lastCheckedAt: zod.number().nullish(),
   createdAt: zod.number(),
@@ -201,7 +212,8 @@ export const listMediaQueryLimitDefault = 10;
 
 export const ListMediaQueryParams = zod.object({
   mainCategoryId: zod.coerce.string().optional(),
-  cursor: zod.coerce.number().optional(),
+  subCategoryId: zod.coerce.string().optional(),
+  cursor: zod.coerce.string().optional(),
   limit: zod.coerce.number().default(listMediaQueryLimitDefault),
 });
 
@@ -213,17 +225,21 @@ export const ListMediaResponse = zod.object({
       description: zod.string().nullish(),
       link: zod.string().nullish(),
       imageUrl: zod.string().nullish(),
+      secondaryImageUrl: zod.string().nullish(),
       categoryId: zod.string().nullish(),
       categoryName: zod.string().nullish(),
       mainCategoryId: zod.string().nullish(),
       mainCategoryName: zod.string().nullish(),
       subCategoryId: zod.string().nullish(),
       subCategoryName: zod.string().nullish(),
+      playStoreLink: zod.string().nullish(),
+      appStoreLink: zod.string().nullish(),
+      sortOrder: zod.number(),
       createdAt: zod.number(),
       updatedAt: zod.number().nullish(),
     }),
   ),
-  cursor: zod.number().nullable(),
+  cursor: zod.string().nullable(),
   hasMore: zod.boolean(),
 });
 
@@ -235,12 +251,24 @@ export const CreateMediaBody = zod.object({
   description: zod.string().nullish(),
   link: zod.string().nullish(),
   imageUrl: zod.string().nullish(),
+  secondaryImageUrl: zod.string().nullish(),
   categoryId: zod.string().nullish(),
   categoryName: zod.string().nullish(),
   mainCategoryId: zod.string().nullish(),
   mainCategoryName: zod.string().nullish(),
   subCategoryId: zod.string().nullish(),
   subCategoryName: zod.string().nullish(),
+  playStoreLink: zod.string().nullish(),
+  appStoreLink: zod.string().nullish(),
+});
+
+/**
+ * @summary Bulk-update sortOrder for a sibling group (same mainCategoryId/subCategoryId)
+ */
+export const ReorderMediaBody = zod.object({
+  mainCategoryId: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  orderedIds: zod.array(zod.string()),
 });
 
 /**
@@ -255,12 +283,15 @@ export const UpdateMediaBody = zod.object({
   description: zod.string().nullish(),
   link: zod.string().nullish(),
   imageUrl: zod.string().nullish(),
+  secondaryImageUrl: zod.string().nullish(),
   categoryId: zod.string().nullish(),
   categoryName: zod.string().nullish(),
   mainCategoryId: zod.string().nullish(),
   mainCategoryName: zod.string().nullish(),
   subCategoryId: zod.string().nullish(),
   subCategoryName: zod.string().nullish(),
+  playStoreLink: zod.string().nullish(),
+  appStoreLink: zod.string().nullish(),
 });
 
 export const UpdateMediaResponse = zod.object({
@@ -269,12 +300,16 @@ export const UpdateMediaResponse = zod.object({
   description: zod.string().nullish(),
   link: zod.string().nullish(),
   imageUrl: zod.string().nullish(),
+  secondaryImageUrl: zod.string().nullish(),
   categoryId: zod.string().nullish(),
   categoryName: zod.string().nullish(),
   mainCategoryId: zod.string().nullish(),
   mainCategoryName: zod.string().nullish(),
   subCategoryId: zod.string().nullish(),
   subCategoryName: zod.string().nullish(),
+  playStoreLink: zod.string().nullish(),
+  appStoreLink: zod.string().nullish(),
+  sortOrder: zod.number(),
   createdAt: zod.number(),
   updatedAt: zod.number().nullish(),
 });

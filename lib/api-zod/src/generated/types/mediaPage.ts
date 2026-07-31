@@ -9,6 +9,6 @@ import type { Media } from "./media";
 
 export interface MediaPage {
   items: Media[];
-  cursor: number | null;
+  cursor: string | null;
   hasMore: boolean;
 }

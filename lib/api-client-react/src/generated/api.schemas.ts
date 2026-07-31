@@ -68,10 +68,17 @@ export interface Project {
   mainCategoryName?: string | null;
   subCategoryId?: string | null;
   subCategoryName?: string | null;
+  sortOrder: number;
   isHidden: boolean;
   lastCheckedAt?: number | null;
   createdAt: number;
   updatedAt?: number | null;
+}
+
+export interface ProjectReorderRequest {
+  mainCategoryId?: string | null;
+  subCategoryId?: string | null;
+  orderedIds: string[];
 }
 
 export interface ProjectCreateRequest {
@@ -95,14 +102,24 @@ export interface Media {
   description?: string | null;
   link?: string | null;
   imageUrl?: string | null;
+  secondaryImageUrl?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
   mainCategoryId?: string | null;
   mainCategoryName?: string | null;
   subCategoryId?: string | null;
   subCategoryName?: string | null;
+  playStoreLink?: string | null;
+  appStoreLink?: string | null;
+  sortOrder: number;
   createdAt: number;
   updatedAt?: number | null;
+}
+
+export interface MediaReorderRequest {
+  mainCategoryId?: string | null;
+  subCategoryId?: string | null;
+  orderedIds: string[];
 }
 
 export interface MediaCreateRequest {
@@ -110,19 +127,22 @@ export interface MediaCreateRequest {
   description?: string | null;
   link?: string | null;
   imageUrl?: string | null;
+  secondaryImageUrl?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
   mainCategoryId?: string | null;
   mainCategoryName?: string | null;
   subCategoryId?: string | null;
   subCategoryName?: string | null;
+  playStoreLink?: string | null;
+  appStoreLink?: string | null;
 }
 
 export type MediaUpdateRequest = MediaCreateRequest;
 
 export interface MediaPage {
   items: Media[];
-  cursor: number | null;
+  cursor: string | null;
   hasMore: boolean;
 }
 
@@ -150,6 +170,7 @@ export type ListProjectsParams = {
 
 export type ListMediaParams = {
   mainCategoryId?: string;
-  cursor?: number;
+  subCategoryId?: string;
+  cursor?: string;
   limit?: number;
 };

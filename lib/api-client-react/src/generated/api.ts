@@ -30,9 +30,11 @@ import type {
   Media,
   MediaCreateRequest,
   MediaPage,
+  MediaReorderRequest,
   MediaUpdateRequest,
   Project,
   ProjectCreateRequest,
+  ProjectReorderRequest,
   ProjectUpdateRequest,
   Stats,
   TopContent,
@@ -873,6 +875,92 @@ export const useCreateProject = <
 };
 
 /**
+ * @summary Bulk-update sortOrder for a sibling group (same mainCategoryId/subCategoryId)
+ */
+export const getReorderProjectsUrl = () => {
+  return `/api/projects/reorder`;
+};
+
+export const reorderProjects = async (
+  projectReorderRequest: ProjectReorderRequest,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getReorderProjectsUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(projectReorderRequest),
+  });
+};
+
+export const getReorderProjectsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderProjects>>,
+    TError,
+    { data: BodyType<ProjectReorderRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reorderProjects>>,
+  TError,
+  { data: BodyType<ProjectReorderRequest> },
+  TContext
+> => {
+  const mutationKey = ["reorderProjects"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reorderProjects>>,
+    { data: BodyType<ProjectReorderRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return reorderProjects(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReorderProjectsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reorderProjects>>
+>;
+export type ReorderProjectsMutationBody = BodyType<ProjectReorderRequest>;
+export type ReorderProjectsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Bulk-update sortOrder for a sibling group (same mainCategoryId/subCategoryId)
+ */
+export const useReorderProjects = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderProjects>>,
+    TError,
+    { data: BodyType<ProjectReorderRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reorderProjects>>,
+  TError,
+  { data: BodyType<ProjectReorderRequest> },
+  TContext
+> => {
+  return useMutation(getReorderProjectsMutationOptions(options));
+};
+
+/**
  * @summary Update a project
  */
 export const getUpdateProjectUrl = (id: string) => {
@@ -1221,6 +1309,92 @@ export const useCreateMedia = <
   TContext
 > => {
   return useMutation(getCreateMediaMutationOptions(options));
+};
+
+/**
+ * @summary Bulk-update sortOrder for a sibling group (same mainCategoryId/subCategoryId)
+ */
+export const getReorderMediaUrl = () => {
+  return `/api/media/reorder`;
+};
+
+export const reorderMedia = async (
+  mediaReorderRequest: MediaReorderRequest,
+  options?: RequestInit,
+): Promise<void> => {
+  return customFetch<void>(getReorderMediaUrl(), {
+    ...options,
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(mediaReorderRequest),
+  });
+};
+
+export const getReorderMediaMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderMedia>>,
+    TError,
+    { data: BodyType<MediaReorderRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reorderMedia>>,
+  TError,
+  { data: BodyType<MediaReorderRequest> },
+  TContext
+> => {
+  const mutationKey = ["reorderMedia"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reorderMedia>>,
+    { data: BodyType<MediaReorderRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return reorderMedia(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReorderMediaMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reorderMedia>>
+>;
+export type ReorderMediaMutationBody = BodyType<MediaReorderRequest>;
+export type ReorderMediaMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Bulk-update sortOrder for a sibling group (same mainCategoryId/subCategoryId)
+ */
+export const useReorderMedia = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reorderMedia>>,
+    TError,
+    { data: BodyType<MediaReorderRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reorderMedia>>,
+  TError,
+  { data: BodyType<MediaReorderRequest> },
+  TContext
+> => {
+  return useMutation(getReorderMediaMutationOptions(options));
 };
 
 /**

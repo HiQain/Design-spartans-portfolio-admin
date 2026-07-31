@@ -8,6 +8,7 @@
 
 export type ListMediaParams = {
   mainCategoryId?: string;
-  cursor?: number;
+  subCategoryId?: string;
+  cursor?: string;
   limit?: number;
 };

@@ -11,10 +11,13 @@ export interface MediaCreateRequest {
   description?: string | null;
   link?: string | null;
   imageUrl?: string | null;
+  secondaryImageUrl?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
   mainCategoryId?: string | null;
   mainCategoryName?: string | null;
   subCategoryId?: string | null;
   subCategoryName?: string | null;
+  playStoreLink?: string | null;
+  appStoreLink?: string | null;
 }

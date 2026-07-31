@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { db, projectsTable, generateId } from "@workspace/db";
-import { CreateProjectBody, UpdateProjectBody, ListProjectsResponse } from "@workspace/api-zod";
+import { CreateProjectBody, UpdateProjectBody, ReorderProjectsBody, ListProjectsResponse } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { optionalAuth } from "../middlewares/optional-auth";
 import { notFound } from "../lib/http-error";
@@ -21,7 +21,9 @@ router.get("/projects", optionalAuth, async (req, res) => {
     .select()
     .from(projectsTable)
     .where(conditions.length ? and(...conditions) : undefined)
-    .orderBy(asc(projectsTable.createdAt));
+    // sortOrder defaults to 0 for every project until an admin manually drags it
+    // within its category group, so createdAt DESC naturally puts new uploads first.
+    .orderBy(asc(projectsTable.sortOrder), desc(projectsTable.createdAt));
 
   res.json(ListProjectsResponse.parse(rows));
 });
@@ -40,6 +42,7 @@ router.post("/projects", requireAuth, async (req, res) => {
     mainCategoryName: body.mainCategoryName ?? null,
     subCategoryId: body.subCategoryId ?? null,
     subCategoryName: body.subCategoryName ?? null,
+    sortOrder: 0,
     isHidden: false,
     lastCheckedAt: null,
     createdAt: Date.now(),
@@ -48,6 +51,25 @@ router.post("/projects", requireAuth, async (req, res) => {
 
   await db.insert(projectsTable).values(row);
   res.status(201).json(row);
+});
+
+router.put("/projects/reorder", requireAuth, async (req, res) => {
+  const body = ReorderProjectsBody.parse(req.body);
+  const siblingFilter = and(
+    body.mainCategoryId ? eq(projectsTable.mainCategoryId, body.mainCategoryId) : isNull(projectsTable.mainCategoryId),
+    body.subCategoryId ? eq(projectsTable.subCategoryId, body.subCategoryId) : isNull(projectsTable.subCategoryId),
+  );
+
+  await Promise.all(
+    body.orderedIds.map((id, index) =>
+      db
+        .update(projectsTable)
+        .set({ sortOrder: index, updatedAt: Date.now() })
+        .where(and(eq(projectsTable.id, id), siblingFilter)),
+    ),
+  );
+
+  res.status(204).end();
 });
 
 router.put("/projects/:id", requireAuth, async (req, res, next) => {

@@ -18,6 +18,7 @@ export interface Project {
   mainCategoryName?: string | null;
   subCategoryId?: string | null;
   subCategoryName?: string | null;
+  sortOrder: number;
   isHidden: boolean;
   lastCheckedAt?: number | null;
   createdAt: number;
