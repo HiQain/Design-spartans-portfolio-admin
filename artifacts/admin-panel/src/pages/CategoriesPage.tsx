@@ -1,18 +1,14 @@
-import { useState, useEffect, type DragEvent } from "react";
+import { useState, type DragEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  collection,
-  addDoc,
-  deleteDoc,
-  doc,
-  getDocs,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-  writeBatch,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+  useListCategories,
+  useCreateCategory,
+  useUpdateCategory,
+  useDeleteCategory,
+  useReorderCategories,
+  getListCategoriesQueryKey,
+  type Category,
+} from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,21 +17,22 @@ import { BRAND_NAME } from "@/lib/branding";
 import { Trash2, Plus, Tag, FolderTree, Pencil, Loader2, GripVertical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface Category {
-  id: string;
-  name: string;
-  parentId?: string;
-  parentName?: string;
-  createdAt: any;
-  sortOrder?: number;
-}
-
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([]);
+  const queryClient = useQueryClient();
+  const { data: categoriesData } = useListCategories();
+  const categories = categoriesData ?? [];
+
+  const createCategoryMutation = useCreateCategory();
+  const updateCategoryMutation = useUpdateCategory();
+  const deleteCategoryMutation = useDeleteCategory();
+  const reorderCategoriesMutation = useReorderCategories();
+
+  const invalidateCategories = () =>
+    queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
+
   const [mainCategoryName, setMainCategoryName] = useState("");
   const [subCategoryName, setSubCategoryName] = useState("");
   const [selectedParentId, setSelectedParentId] = useState("");
-  const [loading, setLoading] = useState(false);
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [editingParentId, setEditingParentId] = useState("");
@@ -46,51 +43,11 @@ export default function CategoriesPage() {
   const [reordering, setReordering] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "categories"), (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Category));
-      setCategories(
-        data.sort((a, b) => {
-          const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
-          const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
-
-          if (orderA !== orderB) {
-            return orderA - orderB;
-          }
-
-          return a.name.localeCompare(b.name);
-        }),
-      );
-    });
-    return unsub;
-  }, []);
-
   const mainCategories = categories.filter((cat) => !cat.parentId);
   const getSubCategories = (parentId: string) =>
     categories.filter((cat) => cat.parentId === parentId);
   const editingCategory = categories.find((category) => category.id === editingCategoryId);
   const isEditingSubCategory = Boolean(editingCategory?.parentId);
-
-  const getNextSortOrder = (parentId?: string) => {
-    const siblingCategories = categories.filter((category) => (category.parentId || "") === (parentId || ""));
-    if (siblingCategories.length === 0) {
-      return 0;
-    }
-
-    return Math.max(...siblingCategories.map((category) => category.sortOrder ?? 0)) + 1;
-  };
-
-  const persistCategoryOrder = async (orderedCategories: Category[]) => {
-    const operations = orderedCategories.map((category, index) => ({
-      ref: doc(db, "categories", category.id),
-      data: {
-        sortOrder: index,
-        updatedAt: serverTimestamp(),
-      },
-    }));
-
-    await commitBatches(operations);
-  };
 
   const reorderCategories = async (draggedId: string, targetId: string, insertAfter = false) => {
     if (draggedId === targetId) {
@@ -104,18 +61,19 @@ export default function CategoriesPage() {
       return;
     }
 
-    const draggedParentId = draggedCategory.parentId || "";
-    const targetParentId = targetCategory.parentId || "";
+    const draggedParentId = draggedCategory.parentId || null;
+    const targetParentId = targetCategory.parentId || null;
 
-    if (draggedParentId !== targetParentId) {
+    if ((draggedParentId || "") !== (targetParentId || "")) {
       return;
     }
 
-    const siblingCategories = categories.filter((category) => (category.parentId || "") === draggedParentId);
-    const draggedIndex = siblingCategories.findIndex((category) => category.id === draggedId);
-    const targetIndex = siblingCategories.findIndex((category) => category.id === targetId);
+    const siblingCategories = categories
+      .filter((category) => (category.parentId || "") === (draggedParentId || ""))
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
-    if (draggedIndex === -1 || targetIndex === -1) {
+    const draggedIndex = siblingCategories.findIndex((category) => category.id === draggedId);
+    if (draggedIndex === -1) {
       return;
     }
 
@@ -127,29 +85,13 @@ export default function CategoriesPage() {
       : adjustedTargetIndex + (insertAfter ? 1 : 0);
     reordered.splice(insertionIndex, 0, movedCategory);
 
-    setCategories((currentCategories) => {
-      const otherCategories = currentCategories.filter(
-        (category) => (category.parentId || "") !== draggedParentId,
-      );
-
-      return [...otherCategories, ...reordered.map((category, index) => ({ ...category, sortOrder: index }))].sort(
-        (a, b) => {
-          const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
-          const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
-
-          if (orderA !== orderB) {
-            return orderA - orderB;
-          }
-
-          return a.name.localeCompare(b.name);
-        },
-      );
-    });
-
     setReordering(true);
 
     try {
-      await persistCategoryOrder(reordered);
+      await reorderCategoriesMutation.mutateAsync({
+        data: { parentId: draggedParentId, orderedIds: reordered.map((category) => category.id) },
+      });
+      await invalidateCategories();
       toast({ title: "Category order updated." });
     } catch {
       toast({
@@ -206,31 +148,16 @@ export default function CategoriesPage() {
     setEditingParentId(category.parentId || "");
   };
 
-  const commitBatches = async (operations: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }>) => {
-    for (let index = 0; index < operations.length; index += 450) {
-      const batch = writeBatch(db);
-      operations.slice(index, index + 450).forEach(({ ref, data }) => {
-        batch.update(ref, data);
-      });
-      await batch.commit();
-    }
-  };
-
   const addMainCategory = async () => {
     if (!mainCategoryName.trim()) return;
-    setLoading(true);
     try {
-      await addDoc(collection(db, "categories"), {
-        name: mainCategoryName.trim(),
-        createdAt: serverTimestamp(),
-        sortOrder: getNextSortOrder(),
-      });
+      await createCategoryMutation.mutateAsync({ data: { name: mainCategoryName.trim() } });
+      await invalidateCategories();
       setMainCategoryName("");
       toast({ title: "Main category added successfully." });
     } catch {
       toast({ title: "Error", description: "Failed to add category. Please try again.", variant: "destructive" });
     }
-    setLoading(false);
   };
 
   const addSubCategory = async () => {
@@ -242,32 +169,25 @@ export default function CategoriesPage() {
       return;
     }
 
-    setLoading(true);
     try {
-      await addDoc(collection(db, "categories"), {
-        name: subCategoryName.trim(),
-        parentId: parent.id,
-        parentName: parent.name,
-        createdAt: serverTimestamp(),
-        sortOrder: getNextSortOrder(parent.id),
+      await createCategoryMutation.mutateAsync({
+        data: { name: subCategoryName.trim(), parentId: parent.id },
       });
+      await invalidateCategories();
       setSubCategoryName("");
       toast({ title: "Subcategory added successfully." });
     } catch {
       toast({ title: "Error", description: "Failed to add subcategory. Please try again.", variant: "destructive" });
     }
-    setLoading(false);
   };
 
   const saveCategoryEdit = async () => {
     if (!editingCategory || !editingCategoryName.trim()) return;
 
     const nextName = editingCategoryName.trim();
-    const nextParentId = editingCategory.parentId ? editingParentId : "";
-    const nextParent = nextParentId
-      ? mainCategories.find((category) => category.id === nextParentId)
+    const nextParent = editingCategory.parentId
+      ? mainCategories.find((category) => category.id === editingParentId)
       : undefined;
-    const parentChanged = Boolean(editingCategory.parentId && editingCategory.parentId !== nextParentId);
 
     if (editingCategory.parentId && !nextParent) {
       toast({ title: "Error", description: "Please select a valid main category.", variant: "destructive" });
@@ -277,107 +197,16 @@ export default function CategoriesPage() {
     setSavingEdit(true);
 
     try {
-      await updateDoc(doc(db, "categories", editingCategory.id), {
-        name: nextName,
-        ...(editingCategory.parentId
-          ? {
-              parentId: nextParent?.id || "",
-              parentName: nextParent?.name || "",
-              ...(parentChanged ? { sortOrder: getNextSortOrder(nextParent?.id) } : {}),
-            }
-          : {}),
-        updatedAt: serverTimestamp(),
+      // Renaming/reparenting a category propagates to child categories and every
+      // referencing project/media row server-side - no client-side cascade needed.
+      await updateCategoryMutation.mutateAsync({
+        id: editingCategory.id,
+        data: {
+          name: nextName,
+          ...(editingCategory.parentId ? { parentId: nextParent!.id } : {}),
+        },
       });
-
-      const operations: Array<{ ref: ReturnType<typeof doc>; data: Record<string, unknown> }> = [];
-
-      if (!editingCategory.parentId) {
-        const childSnapshot = await getDocs(query(collection(db, "categories"), where("parentId", "==", editingCategory.id)));
-        childSnapshot.forEach((childDoc) => {
-          operations.push({
-            ref: doc(db, "categories", childDoc.id),
-            data: {
-              parentName: nextName,
-              updatedAt: serverTimestamp(),
-            },
-          });
-        });
-      }
-
-      const [projectsSnapshot, contentSnapshot] = await Promise.all([
-        getDocs(collection(db, "projects")),
-        getDocs(collection(db, "content")),
-      ]);
-
-      projectsSnapshot.forEach((projectDoc) => {
-        const project = projectDoc.data();
-        const updateData: Record<string, unknown> = {};
-
-        if (!editingCategory.parentId && project.mainCategoryId === editingCategory.id) {
-          updateData.mainCategoryName = nextName;
-        }
-
-        if (editingCategory.parentId && project.subCategoryId === editingCategory.id) {
-          updateData.subCategoryName = nextName;
-        }
-
-        if (editingCategory.parentId && project.categoryId === editingCategory.id) {
-          updateData.categoryName = nextName;
-        }
-
-        if (!editingCategory.parentId && !project.subCategoryId && project.categoryId === editingCategory.id) {
-          updateData.categoryName = nextName;
-        }
-
-        if (editingCategory.parentId && nextParent && project.subCategoryId === editingCategory.id) {
-          updateData.mainCategoryId = nextParent.id;
-          updateData.mainCategoryName = nextParent.name;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          updateData.updatedAt = serverTimestamp();
-          operations.push({
-            ref: doc(db, "projects", projectDoc.id),
-            data: updateData,
-          });
-        }
-      });
-
-      contentSnapshot.forEach((contentDoc) => {
-        const item = contentDoc.data();
-        const updateData: Record<string, unknown> = {};
-
-        if (!editingCategory.parentId && item.mainCategoryId === editingCategory.id) {
-          updateData.mainCategoryName = nextName;
-        }
-
-        if (editingCategory.parentId && item.subCategoryId === editingCategory.id) {
-          updateData.subCategoryName = nextName;
-        }
-
-        if (editingCategory.parentId && item.categoryId === editingCategory.id) {
-          updateData.categoryName = nextName;
-        }
-
-        if (!editingCategory.parentId && !item.subCategoryId && item.categoryId === editingCategory.id) {
-          updateData.categoryName = nextName;
-        }
-
-        if (editingCategory.parentId && nextParent && item.subCategoryId === editingCategory.id) {
-          updateData.mainCategoryId = nextParent.id;
-          updateData.mainCategoryName = nextParent.name;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          updateData.updatedAt = serverTimestamp();
-          operations.push({
-            ref: doc(db, "content", contentDoc.id),
-            data: updateData,
-          });
-        }
-      });
-
-      await commitBatches(operations);
+      await invalidateCategories();
       resetEditForm();
       toast({ title: "Category updated successfully." });
     } catch {
@@ -389,19 +218,9 @@ export default function CategoriesPage() {
 
   const deleteCategory = async (id: string) => {
     try {
-      const childCategories = categories.filter((cat) => cat.parentId === id);
-
-      if (childCategories.length > 0) {
-        const batch = writeBatch(db);
-        batch.delete(doc(db, "categories", id));
-        childCategories.forEach((child) => {
-          batch.delete(doc(db, "categories", child.id));
-        });
-        await batch.commit();
-      } else {
-        await deleteDoc(doc(db, "categories", id));
-      }
-
+      // Deletes the category's direct children too, server-side.
+      await deleteCategoryMutation.mutateAsync({ id });
+      await invalidateCategories();
       toast({ title: "Category deleted." });
     } catch {
       toast({ title: "Error", description: "Failed to delete category.", variant: "destructive" });
@@ -431,7 +250,7 @@ export default function CategoriesPage() {
                 onKeyDown={(e) => e.key === "Enter" && addMainCategory()}
               />
             </div>
-            <Button onClick={addMainCategory} disabled={loading || !mainCategoryName.trim()}>
+            <Button onClick={addMainCategory} disabled={createCategoryMutation.isPending || !mainCategoryName.trim()}>
               <Plus className="w-4 h-4 mr-1" />
               Add Main
             </Button>
@@ -470,7 +289,7 @@ export default function CategoriesPage() {
                 onKeyDown={(e) => e.key === "Enter" && addSubCategory()}
               />
             </div>
-            <Button onClick={addSubCategory} disabled={loading || !selectedParentId || !subCategoryName.trim()}>
+            <Button onClick={addSubCategory} disabled={createCategoryMutation.isPending || !selectedParentId || !subCategoryName.trim()}>
               <Plus className="w-4 h-4 mr-1" />
               Add Sub
             </Button>

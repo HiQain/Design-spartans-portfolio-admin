@@ -14,3 +14,306 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * @summary Log in with email + password
+ */
+export const LoginBody = zod.object({
+  email: zod.string(),
+  password: zod.string(),
+});
+
+export const LoginResponse = zod.object({
+  token: zod.string(),
+  user: zod.object({
+    id: zod.number(),
+    email: zod.string(),
+  }),
+});
+
+/**
+ * @summary Get the current authenticated user
+ */
+export const GetMeResponse = zod.object({
+  id: zod.number(),
+  email: zod.string(),
+});
+
+/**
+ * @summary List all categories
+ */
+export const ListCategoriesResponseItem = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  parentId: zod.string().nullish(),
+  parentName: zod.string().nullish(),
+  sortOrder: zod.number(),
+  layout: zod.string().nullish(),
+  createdAt: zod.number(),
+  updatedAt: zod.number().nullish(),
+});
+export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem);
+
+/**
+ * @summary Create a category
+ */
+export const CreateCategoryBody = zod.object({
+  name: zod.string(),
+  parentId: zod.string().nullish(),
+  layout: zod.string().nullish(),
+});
+
+/**
+ * @summary Bulk-update sortOrder for a sibling group (same parentId)
+ */
+export const ReorderCategoriesBody = zod.object({
+  parentId: zod.string().nullish(),
+  orderedIds: zod.array(zod.string()),
+});
+
+/**
+ * @summary Update a category
+ */
+export const UpdateCategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateCategoryBody = zod.object({
+  name: zod.string().optional(),
+  parentId: zod.string().nullish(),
+  layout: zod.string().nullish(),
+});
+
+export const UpdateCategoryResponse = zod.object({
+  id: zod.string(),
+  name: zod.string(),
+  parentId: zod.string().nullish(),
+  parentName: zod.string().nullish(),
+  sortOrder: zod.number(),
+  layout: zod.string().nullish(),
+  createdAt: zod.number(),
+  updatedAt: zod.number().nullish(),
+});
+
+/**
+ * @summary Delete a category (and its direct children, if any)
+ */
+export const DeleteCategoryParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary List projects. Public callers never see hidden (dead-link) projects; authenticated callers may pass includeHidden=true for the admin view.
+ */
+export const listProjectsQueryIncludeHiddenDefault = false;
+
+export const ListProjectsQueryParams = zod.object({
+  mainCategoryId: zod.coerce.string().optional(),
+  includeHidden: zod.coerce
+    .boolean()
+    .default(listProjectsQueryIncludeHiddenDefault),
+});
+
+export const ListProjectsResponseItem = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  link: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  categoryId: zod.string().nullish(),
+  categoryName: zod.string().nullish(),
+  mainCategoryId: zod.string().nullish(),
+  mainCategoryName: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  subCategoryName: zod.string().nullish(),
+  isHidden: zod.boolean(),
+  lastCheckedAt: zod.number().nullish(),
+  createdAt: zod.number(),
+  updatedAt: zod.number().nullish(),
+});
+export const ListProjectsResponse = zod.array(ListProjectsResponseItem);
+
+/**
+ * @summary Create a project
+ */
+export const CreateProjectBody = zod.object({
+  title: zod.string(),
+  description: zod.string().nullish(),
+  link: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  categoryId: zod.string().nullish(),
+  categoryName: zod.string().nullish(),
+  mainCategoryId: zod.string().nullish(),
+  mainCategoryName: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  subCategoryName: zod.string().nullish(),
+});
+
+/**
+ * @summary Update a project
+ */
+export const UpdateProjectParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateProjectBody = zod.object({
+  title: zod.string(),
+  description: zod.string().nullish(),
+  link: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  categoryId: zod.string().nullish(),
+  categoryName: zod.string().nullish(),
+  mainCategoryId: zod.string().nullish(),
+  mainCategoryName: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  subCategoryName: zod.string().nullish(),
+});
+
+export const UpdateProjectResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  link: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  categoryId: zod.string().nullish(),
+  categoryName: zod.string().nullish(),
+  mainCategoryId: zod.string().nullish(),
+  mainCategoryName: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  subCategoryName: zod.string().nullish(),
+  isHidden: zod.boolean(),
+  lastCheckedAt: zod.number().nullish(),
+  createdAt: zod.number(),
+  updatedAt: zod.number().nullish(),
+});
+
+/**
+ * @summary Delete a project
+ */
+export const DeleteProjectParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Cursor-paginated media list, filterable by category. Public callers get this same pagination; there is no hidden-media concept.
+ */
+export const listMediaQueryLimitDefault = 10;
+
+export const ListMediaQueryParams = zod.object({
+  mainCategoryId: zod.coerce.string().optional(),
+  cursor: zod.coerce.number().optional(),
+  limit: zod.coerce.number().default(listMediaQueryLimitDefault),
+});
+
+export const ListMediaResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      id: zod.string(),
+      title: zod.string(),
+      description: zod.string().nullish(),
+      link: zod.string().nullish(),
+      imageUrl: zod.string().nullish(),
+      categoryId: zod.string().nullish(),
+      categoryName: zod.string().nullish(),
+      mainCategoryId: zod.string().nullish(),
+      mainCategoryName: zod.string().nullish(),
+      subCategoryId: zod.string().nullish(),
+      subCategoryName: zod.string().nullish(),
+      createdAt: zod.number(),
+      updatedAt: zod.number().nullish(),
+    }),
+  ),
+  cursor: zod.number().nullable(),
+  hasMore: zod.boolean(),
+});
+
+/**
+ * @summary Create a media item
+ */
+export const CreateMediaBody = zod.object({
+  title: zod.string(),
+  description: zod.string().nullish(),
+  link: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  categoryId: zod.string().nullish(),
+  categoryName: zod.string().nullish(),
+  mainCategoryId: zod.string().nullish(),
+  mainCategoryName: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  subCategoryName: zod.string().nullish(),
+});
+
+/**
+ * @summary Update a media item
+ */
+export const UpdateMediaParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const UpdateMediaBody = zod.object({
+  title: zod.string(),
+  description: zod.string().nullish(),
+  link: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  categoryId: zod.string().nullish(),
+  categoryName: zod.string().nullish(),
+  mainCategoryId: zod.string().nullish(),
+  mainCategoryName: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  subCategoryName: zod.string().nullish(),
+});
+
+export const UpdateMediaResponse = zod.object({
+  id: zod.string(),
+  title: zod.string(),
+  description: zod.string().nullish(),
+  link: zod.string().nullish(),
+  imageUrl: zod.string().nullish(),
+  categoryId: zod.string().nullish(),
+  categoryName: zod.string().nullish(),
+  mainCategoryId: zod.string().nullish(),
+  mainCategoryName: zod.string().nullish(),
+  subCategoryId: zod.string().nullish(),
+  subCategoryName: zod.string().nullish(),
+  createdAt: zod.number(),
+  updatedAt: zod.number().nullish(),
+});
+
+/**
+ * @summary Delete a media item
+ */
+export const DeleteMediaParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+/**
+ * @summary Get the singleton top-content block
+ */
+export const GetTopContentResponse = zod.object({
+  content: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  updatedAt: zod.number().nullish(),
+});
+
+/**
+ * @summary Overwrite the singleton top-content block
+ */
+export const UpdateTopContentBody = zod.object({
+  content: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+});
+
+export const UpdateTopContentResponse = zod.object({
+  content: zod.string().nullish(),
+  logoUrl: zod.string().nullish(),
+  updatedAt: zod.number().nullish(),
+});
+
+/**
+ * @summary Dashboard counts
+ */
+export const GetStatsResponse = zod.object({
+  categoriesCount: zod.number(),
+  projectsCount: zod.number(),
+  mediaCount: zod.number(),
+});

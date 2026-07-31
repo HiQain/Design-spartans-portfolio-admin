@@ -1,19 +1,12 @@
-import { useState, useEffect } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useGetStats } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BRAND_LOGO_SRC, BRAND_NAME } from "@/lib/branding";
 import { Tag, FolderOpen, LayoutDashboard } from "lucide-react";
 
 export default function DashboardPage() {
-  const [catCount, setCatCount] = useState(0);
-  const [projCount, setProjCount] = useState(0);
-
-  useEffect(() => {
-    const unsubCat = onSnapshot(collection(db, "categories"), (snap) => setCatCount(snap.size));
-    const unsubProj = onSnapshot(collection(db, "projects"), (snap) => setProjCount(snap.size));
-    return () => { unsubCat(); unsubProj(); };
-  }, []);
+  const { data: stats } = useGetStats();
+  const catCount = stats?.categoriesCount ?? 0;
+  const projCount = stats?.projectsCount ?? 0;
 
   return (
     <div className="space-y-6">

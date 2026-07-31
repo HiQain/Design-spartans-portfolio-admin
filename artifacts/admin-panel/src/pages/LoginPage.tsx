@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { ApiError } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { APP_TITLE, BRAND_LOGO_SRC, BRAND_NAME, BRAND_TAGLINE } from "@/lib/branding";
 import { Loader2 } from "lucide-react";
 
-export default function LoginPage() {
+interface LoginPageProps {
+  onLogin: (email: string, password: string) => Promise<void>;
+}
+
+export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,14 +26,11 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err: any) {
-      const code = err?.code || "";
-      if (code === "auth/user-not-found" || code === "auth/wrong-password" || code === "auth/invalid-credential") {
+      await onLogin(email.trim(), password);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
         setError("Invalid email or password. Please try again.");
-      } else if (code === "auth/invalid-email") {
-        setError("Please enter a valid email address.");
-      } else if (code === "auth/too-many-requests") {
+      } else if (err instanceof ApiError && err.status === 429) {
         setError("Too many failed attempts. Please try again later.");
       } else {
         setError("Sign in failed. Please check your credentials and try again.");

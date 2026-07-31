@@ -47,3 +47,12 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Secrets
+.env
+.env.*
+!.env.example
+uploads/
+
+# DB dumps (real client data, exported for cPanel import)
+*.sql

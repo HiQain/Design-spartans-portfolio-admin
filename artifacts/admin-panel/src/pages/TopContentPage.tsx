@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { useQueryClient } from "@tanstack/react-query";
+import { useGetTopContent, useUpdateTopContent, getGetTopContentQueryKey } from "@workspace/api-client-react";
+import { uploadImage } from "@/lib/uploads";
 import { BRAND_NAME } from "@/lib/branding";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -10,86 +11,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileText, ImageIcon, Loader2, X } from "lucide-react";
 
-interface TopContentDoc {
-  content?: string;
-  logoUrl?: string;
-}
-
-const MAX_EMBEDDED_IMAGE_BYTES = 700 * 1024;
-
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
 }
 
-function readFileAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Image file could not be read."));
-    reader.readAsDataURL(file);
-  });
-}
-
-function loadImage(src: string) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("Image preview could not be generated."));
-    image.src = src;
-  });
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, quality: number) {
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          reject(new Error("Image compression failed."));
-          return;
-        }
-        resolve(blob);
-      },
-      "image/webp",
-      quality,
-    );
-  });
-}
-
-async function fileToEmbeddedImage(file: File) {
-  const dataUrl = await readFileAsDataUrl(file);
-  const sourceImage = await loadImage(dataUrl);
-  const maxDimension = 1200;
-  const scale = Math.min(1, maxDimension / Math.max(sourceImage.width, sourceImage.height));
-  const canvas = document.createElement("canvas");
-
-  canvas.width = Math.max(1, Math.round(sourceImage.width * scale));
-  canvas.height = Math.max(1, Math.round(sourceImage.height * scale));
-
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    throw new Error("Image processing is not supported in this browser.");
-  }
-
-  context.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
-
-  let quality = 0.9;
-  let blob = await canvasToBlob(canvas, quality);
-
-  while (blob.size > MAX_EMBEDDED_IMAGE_BYTES && quality > 0.4) {
-    quality -= 0.1;
-    blob = await canvasToBlob(canvas, quality);
-  }
-
-  if (blob.size > MAX_EMBEDDED_IMAGE_BYTES) {
-    throw new Error("Logo is still too large after compression. Please use a smaller image.");
-  }
-
-  return await readFileAsDataUrl(new File([blob], `${file.name}.webp`, { type: "image/webp" }));
-}
-
 export default function TopContentPage() {
+  const queryClient = useQueryClient();
+  const { data: topContent } = useGetTopContent();
+  const updateTopContentMutation = useUpdateTopContent();
+
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [savedLogoUrl, setSavedLogoUrl] = useState("");
@@ -100,18 +31,14 @@ export default function TopContentPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, "topContent", "primary"), (snapshot) => {
-      const data = snapshot.data() as TopContentDoc | undefined;
-      const nextContent = data?.content ?? "";
-      const nextLogoUrl = data?.logoUrl ?? "";
-      setSavedContent(nextContent);
-      setSavedLogoUrl(nextLogoUrl);
-      setContent((currentValue) => (currentValue ? currentValue : nextContent));
-      setLogoPreview((currentValue) => (currentValue ? currentValue : nextLogoUrl));
-    });
-
-    return unsubscribe;
-  }, []);
+    if (!topContent) return;
+    const nextContent = topContent.content ?? "";
+    const nextLogoUrl = topContent.logoUrl ?? "";
+    setSavedContent(nextContent);
+    setSavedLogoUrl(nextLogoUrl);
+    setContent((currentValue) => (currentValue ? currentValue : nextContent));
+    setLogoPreview((currentValue) => (currentValue ? currentValue : nextLogoUrl));
+  }, [topContent]);
 
   const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -163,13 +90,13 @@ export default function TopContentPage() {
     setSaving(true);
 
     try {
-      const finalLogoUrl = logoFile ? await fileToEmbeddedImage(logoFile) : savedLogoUrl;
+      const finalLogoUrl = logoFile ? await uploadImage(logoFile) : savedLogoUrl;
 
-      await setDoc(doc(db, "topContent", "primary"), {
-        content: content.trim(),
-        logoUrl: finalLogoUrl,
-        updatedAt: serverTimestamp(),
+      await updateTopContentMutation.mutateAsync({
+        data: { content: content.trim(), logoUrl: finalLogoUrl },
       });
+      await queryClient.invalidateQueries({ queryKey: getGetTopContentQueryKey() });
+
       setSavedLogoUrl(finalLogoUrl);
       setLogoPreview(finalLogoUrl);
       setLogoFile(null);

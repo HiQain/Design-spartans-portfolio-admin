@@ -1,5 +1,11 @@
+import "dotenv/config";
+import { mkdirSync } from "node:fs";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { env } from "./lib/env";
+import { startLinkCheckCron } from "./lib/link-check-cron";
+
+mkdirSync(env.uploadsDir, { recursive: true });
 
 const rawPort = process.env["PORT"];
 
@@ -22,4 +28,5 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  startLinkCheckCron();
 });
