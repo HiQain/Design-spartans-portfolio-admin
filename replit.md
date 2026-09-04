@@ -2,13 +2,13 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+npm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
 ## Stack
 
-- **Monorepo tool**: pnpm workspaces
+- **Monorepo tool**: npm workspaces
 - **Node.js version**: 24
-- **Package manager**: pnpm
+- **Package manager**: npm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
 - **Database**: PostgreSQL + Drizzle ORM (backend), Firebase Firestore (admin panel)
@@ -29,7 +29,6 @@ artifacts-monorepo/
 │   ├── api-zod/            # Generated Zod schemas from OpenAPI
 │   └── db/                 # Drizzle ORM schema + DB connection
 ├── scripts/                # Utility scripts
-├── pnpm-workspace.yaml
 ├── tsconfig.base.json
 ├── tsconfig.json
 └── package.json

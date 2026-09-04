@@ -1,8 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "installCommand": "pnpm install",
-  "buildCommand": "pnpm --filter @workspace/admin-panel build",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build --workspace=@workspace/admin-panel",
   "outputDirectory": "artifacts/admin-panel/dist/public",
   "rewrites": [
     {

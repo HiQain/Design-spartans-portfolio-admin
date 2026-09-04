@@ -10,15 +10,11 @@ id = "artifacts/mockup-sandbox"
 router = "application"
 deploymentTarget = "autoscale"
 
-[deployment.postBuild]
-args = ["pnpm", "store", "prune"]
-env = { "CI" = "true" }
-
 [workflows]
 runButton = "Project"
 
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "NPM_WORKSPACE"
 expertMode = true
 
 [postMerge]
