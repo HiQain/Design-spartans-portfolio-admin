@@ -63,6 +63,7 @@ export interface Project {
   link?: string | null;
   imageUrl?: string | null;
   previewImageUrl?: string | null;
+  isEmbeddable?: boolean | null;
   categoryId?: string | null;
   categoryName?: string | null;
   mainCategoryId?: string | null;

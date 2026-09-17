@@ -42,24 +42,52 @@ function normalizeUrl(rawUrl: string): string {
 }
 
 /**
- * Captures a screenshot of `link` and returns its public URL, or null if the capture
- * failed (site unreachable, timed out, etc.) - best-effort, never throws, since this
- * always runs in the background rather than blocking a request or the cron loop.
+ * Best-effort read of whether a site's own response headers allow it to be embedded by
+ * a third-party origin (ours) at all - X-Frame-Options DENY/SAMEORIGIN or a CSP
+ * `frame-ancestors` list that doesn't include `*` both mean the browser will refuse to
+ * render it in our iframe no matter what we do client-side, so we fall back to the
+ * screenshot for those. Defaults to embeddable when neither header is present, since
+ * that's the common case and the safest default given no restriction was declared.
  */
-export async function captureScreenshot(link: string): Promise<string | null> {
+export function isEmbeddableFromHeaders(headers: Record<string, string>): boolean {
+  const xfo = (headers["x-frame-options"] || "").toLowerCase();
+  if (xfo.includes("deny") || xfo.includes("sameorigin")) return false;
+
+  const csp = headers["content-security-policy"] || "";
+  const frameAncestors = csp.match(/frame-ancestors\s+([^;]+)/i)?.[1]?.trim();
+  if (frameAncestors && !frameAncestors.includes("*")) return false;
+
+  return true;
+}
+
+export interface ScreenshotResult {
+  previewImageUrl: string;
+  isEmbeddable: boolean;
+}
+
+/**
+ * Captures a screenshot of `link` and checks whether it can also be live-embedded, or
+ * returns null if the capture failed (site unreachable, timed out, etc.) - best-effort,
+ * never throws, since this always runs in the background rather than blocking a request
+ * or the cron loop.
+ */
+export async function captureScreenshot(link: string): Promise<ScreenshotResult | null> {
   let page;
   try {
     mkdirSync(screenshotsDir, { recursive: true });
     const browser = await getBrowser();
     page = await browser.newPage();
     await page.setViewport({ width: VIEWPORT_WIDTH, height: VIEWPORT_HEIGHT });
-    await page.goto(normalizeUrl(link), { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
+    const response = await page.goto(normalizeUrl(link), { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
     await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
 
     const filename = `${generateId()}.jpg`;
     await page.screenshot({ path: path.join(screenshotsDir, filename), type: "jpeg", quality: 80 });
 
-    return `${env.apiPublicBaseUrl}/uploads/screenshots/${filename}`;
+    return {
+      previewImageUrl: `${env.apiPublicBaseUrl}/uploads/screenshots/${filename}`,
+      isEmbeddable: response ? isEmbeddableFromHeaders(response.headers()) : true,
+    };
   } catch (err) {
     logger.warn({ err, link }, "Screenshot capture failed");
     return null;

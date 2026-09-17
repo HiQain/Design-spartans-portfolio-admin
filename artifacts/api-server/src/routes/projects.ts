@@ -16,9 +16,12 @@ import { logger } from "../lib/logger";
  */
 function scheduleScreenshotCapture(id: string, link: string): void {
   captureScreenshot(link)
-    .then((previewImageUrl) => {
-      if (!previewImageUrl) return;
-      return db.update(projectsTable).set({ previewImageUrl }).where(eq(projectsTable.id, id));
+    .then((result) => {
+      if (!result) return;
+      return db
+        .update(projectsTable)
+        .set({ previewImageUrl: result.previewImageUrl, isEmbeddable: result.isEmbeddable })
+        .where(eq(projectsTable.id, id));
     })
     .catch((err) => logger.warn({ err, id, link }, "Failed to store captured screenshot"));
 }
@@ -60,6 +63,7 @@ router.post("/projects", requireAuth, async (req, res) => {
     subCategoryId: body.subCategoryId ?? null,
     subCategoryName: body.subCategoryName ?? null,
     previewImageUrl: null,
+    isEmbeddable: null,
     sortOrder: 0,
     isHidden: false,
     lastCheckedAt: null,
@@ -104,9 +108,10 @@ router.put("/projects/:id", requireAuth, async (req, res, next) => {
   const after = {
     ...existing,
     ...body,
-    // A new link needs a fresh screenshot - clear the stale one now so the public site
+    // A new link needs a fresh screenshot - clear the stale ones now so the public site
     // shows the "generating" fallback instead of the old link's preview in the meantime.
     previewImageUrl: linkChanged ? null : existing.previewImageUrl,
+    isEmbeddable: linkChanged ? null : existing.isEmbeddable,
     updatedAt: Date.now(),
   };
 

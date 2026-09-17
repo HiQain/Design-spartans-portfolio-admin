@@ -17,6 +17,10 @@ export const projectsTable = mysqlTable("projects", {
   // sites block that outright via X-Frame-Options/CSP). Null until the capture
   // cron/on-save hook (see lib/screenshot.ts) fills it in.
   previewImageUrl: varchar("preview_image_url", { length: 1000 }),
+  // Whether `link`'s own response headers (X-Frame-Options/CSP frame-ancestors) allow
+  // it to be embedded live in an iframe - determined alongside the screenshot capture.
+  // Null until captured; the public site treats null the same as false (screenshot only).
+  isEmbeddable: boolean("is_embeddable"),
   categoryId: varchar("category_id", { length: 128 }),
   categoryName: varchar("category_name", { length: 255 }),
   mainCategoryId: varchar("main_category_id", { length: 128 }),
@@ -36,6 +40,7 @@ export const projectsTable = mysqlTable("projects", {
 export const insertProjectSchema = createInsertSchema(projectsTable).omit({
   id: true,
   previewImageUrl: true,
+  isEmbeddable: true,
   isHidden: true,
   lastCheckedAt: true,
   createdAt: true,

@@ -167,6 +167,9 @@ components:
         previewImageUrl:
           type: string
           nullable: true
+        isEmbeddable:
+          type: boolean
+          nullable: true
         categoryId:
           type: string
           nullable: true

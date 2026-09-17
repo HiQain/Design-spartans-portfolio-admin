@@ -35,11 +35,14 @@ export async function runScreenshotBackfill(): Promise<{ attempted: number; capt
   let captured = 0;
 
   await runWithConcurrency(candidates, CAPTURE_CONCURRENCY, async (project) => {
-    const previewImageUrl = await captureScreenshot(project.link!);
-    if (!previewImageUrl) return;
+    const result = await captureScreenshot(project.link!);
+    if (!result) return;
 
     captured++;
-    await db.update(projectsTable).set({ previewImageUrl }).where(eq(projectsTable.id, project.id));
+    await db
+      .update(projectsTable)
+      .set({ previewImageUrl: result.previewImageUrl, isEmbeddable: result.isEmbeddable })
+      .where(eq(projectsTable.id, project.id));
   });
 
   logger.info({ attempted: candidates.length, captured }, "Screenshot backfill finished");
