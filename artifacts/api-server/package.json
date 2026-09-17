@@ -24,6 +24,7 @@
     "node-cron": "^3.0.3",
     "pino": "^9",
     "pino-http": "^10",
+    "puppeteer": "^25.11.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

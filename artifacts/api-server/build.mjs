@@ -120,8 +120,9 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
   });
 
   // `@workspace/db`/`@workspace/api-zod` are bundled directly into index.mjs above
-  // (they're not in `external`) - the only real runtime dependency left is `mysql2`
-  // (externalized because it does native/dynamic requires). Writing a minimal,
+  // (they're not in `external`) - the real runtime dependencies left are `mysql2`
+  // and `puppeteer` (externalized because they do native/dynamic requires and, for
+  // puppeteer, ship a separately-downloaded Chromium binary). Writing a minimal,
   // workspace-free package.json here means `dist/` is a fully self-contained,
   // deployable folder: copy it anywhere (e.g. a cPanel Node.js App root) and
   // `npm install` just works, with no pnpm workspace to resolve.
@@ -134,7 +135,7 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
         type: "module",
         main: "index.mjs",
         scripts: { start: "node --enable-source-maps index.mjs" },
-        dependencies: { mysql2: "^3.11.5" },
+        dependencies: { mysql2: "^3.11.5", puppeteer: "^25.11.0" },
       },
       null,
       2,

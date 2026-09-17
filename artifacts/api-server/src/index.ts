@@ -4,6 +4,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { env } from "./lib/env";
 import { startLinkCheckCron } from "./lib/link-check-cron";
+import { startScreenshotCron } from "./lib/screenshot-cron";
 
 mkdirSync(env.uploadsDir, { recursive: true });
 
@@ -29,4 +30,5 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   startLinkCheckCron();
+  startScreenshotCron();
 });

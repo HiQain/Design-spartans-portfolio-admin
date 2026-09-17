@@ -57,6 +57,8 @@ export default function ContentPage() {
   const [subCategoryId, setSubCategoryId] = useState("");
   const [playStoreLink, setPlayStoreLink] = useState("");
   const [appStoreLink, setAppStoreLink] = useState("");
+  const [figmaLink, setFigmaLink] = useState("");
+  const [websiteLink, setWebsiteLink] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [mediaPreview, setMediaPreview] = useState("");
   const [secondaryMediaFile, setSecondaryMediaFile] = useState<File | null>(null);
@@ -174,6 +176,8 @@ export default function ContentPage() {
     setSubCategoryId("");
     setPlayStoreLink("");
     setAppStoreLink("");
+    setFigmaLink("");
+    setWebsiteLink("");
     setEditingMediaId(null);
     clearMedia();
     clearSecondaryMedia();
@@ -297,6 +301,8 @@ export default function ContentPage() {
       subCategoryName: subCategory?.name,
       playStoreLink: isMobileAppCategory ? playStoreLink.trim() || null : null,
       appStoreLink: isMobileAppCategory ? appStoreLink.trim() || null : null,
+      figmaLink: isMobileAppCategory ? figmaLink.trim() || null : null,
+      websiteLink: isMobileAppCategory ? websiteLink.trim() || null : null,
     };
 
     try {
@@ -389,6 +395,8 @@ export default function ContentPage() {
     setSubCategoryId(item.subCategoryId || "");
     setPlayStoreLink(item.playStoreLink || "");
     setAppStoreLink(item.appStoreLink || "");
+    setFigmaLink(item.figmaLink || "");
+    setWebsiteLink(item.websiteLink || "");
     setMediaPreview(item.imageUrl || "");
     setMediaFile(null);
     setSecondaryMediaPreview(item.secondaryImageUrl || "");
@@ -590,6 +598,28 @@ export default function ContentPage() {
                   placeholder="https://apps.apple.com/app/..."
                   value={appStoreLink}
                   onChange={(event) => setAppStoreLink(event.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="media-figma-link">Figma Link</Label>
+                <Input
+                  id="media-figma-link"
+                  placeholder="https://www.figma.com/design/..."
+                  value={figmaLink}
+                  onChange={(event) => setFigmaLink(event.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="media-website-link">Website Link</Label>
+                <Input
+                  id="media-website-link"
+                  placeholder="https://example.com"
+                  value={websiteLink}
+                  onChange={(event) => setWebsiteLink(event.target.value)}
                   className="mt-1"
                 />
               </div>

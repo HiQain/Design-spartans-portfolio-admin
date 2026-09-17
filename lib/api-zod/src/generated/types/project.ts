@@ -12,6 +12,7 @@ export interface Project {
   description?: string | null;
   link?: string | null;
   imageUrl?: string | null;
+  previewImageUrl?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
   mainCategoryId?: string | null;

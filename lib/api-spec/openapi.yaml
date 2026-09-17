@@ -164,6 +164,9 @@ components:
         imageUrl:
           type: string
           nullable: true
+        previewImageUrl:
+          type: string
+          nullable: true
         categoryId:
           type: string
           nullable: true
@@ -299,6 +302,12 @@ components:
         appStoreLink:
           type: string
           nullable: true
+        figmaLink:
+          type: string
+          nullable: true
+        websiteLink:
+          type: string
+          nullable: true
         sortOrder:
           type: integer
         createdAt:
@@ -367,6 +376,12 @@ components:
           type: string
           nullable: true
         appStoreLink:
+          type: string
+          nullable: true
+        figmaLink:
+          type: string
+          nullable: true
+        websiteLink:
           type: string
           nullable: true
       required:

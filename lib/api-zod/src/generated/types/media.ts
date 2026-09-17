@@ -21,6 +21,8 @@ export interface Media {
   subCategoryName?: string | null;
   playStoreLink?: string | null;
   appStoreLink?: string | null;
+  figmaLink?: string | null;
+  websiteLink?: string | null;
   sortOrder: number;
   createdAt: number;
   updatedAt?: number | null;

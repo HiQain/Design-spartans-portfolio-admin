@@ -12,6 +12,11 @@ export const projectsTable = mysqlTable("projects", {
   description: text("description"),
   link: varchar("link", { length: 1000 }),
   imageUrl: varchar("image_url", { length: 1000 }),
+  // Server-captured screenshot of `link`, cached so the public site can show an
+  // instant static preview instead of live-embedding the site in an iframe (many
+  // sites block that outright via X-Frame-Options/CSP). Null until the capture
+  // cron/on-save hook (see lib/screenshot.ts) fills it in.
+  previewImageUrl: varchar("preview_image_url", { length: 1000 }),
   categoryId: varchar("category_id", { length: 128 }),
   categoryName: varchar("category_name", { length: 255 }),
   mainCategoryId: varchar("main_category_id", { length: 128 }),
@@ -30,6 +35,7 @@ export const projectsTable = mysqlTable("projects", {
 
 export const insertProjectSchema = createInsertSchema(projectsTable).omit({
   id: true,
+  previewImageUrl: true,
   isHidden: true,
   lastCheckedAt: true,
   createdAt: true,

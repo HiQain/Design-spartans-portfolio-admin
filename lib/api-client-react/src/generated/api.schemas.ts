@@ -62,6 +62,7 @@ export interface Project {
   description?: string | null;
   link?: string | null;
   imageUrl?: string | null;
+  previewImageUrl?: string | null;
   categoryId?: string | null;
   categoryName?: string | null;
   mainCategoryId?: string | null;
@@ -111,6 +112,8 @@ export interface Media {
   subCategoryName?: string | null;
   playStoreLink?: string | null;
   appStoreLink?: string | null;
+  figmaLink?: string | null;
+  websiteLink?: string | null;
   sortOrder: number;
   createdAt: number;
   updatedAt?: number | null;
@@ -136,6 +139,8 @@ export interface MediaCreateRequest {
   subCategoryName?: string | null;
   playStoreLink?: string | null;
   appStoreLink?: string | null;
+  figmaLink?: string | null;
+  websiteLink?: string | null;
 }
 
 export type MediaUpdateRequest = MediaCreateRequest;

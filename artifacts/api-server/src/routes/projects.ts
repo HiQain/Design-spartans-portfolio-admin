@@ -5,6 +5,23 @@ import { CreateProjectBody, UpdateProjectBody, ReorderProjectsBody, ListProjects
 import { requireAuth } from "../middlewares/auth";
 import { optionalAuth } from "../middlewares/optional-auth";
 import { notFound } from "../lib/http-error";
+import { captureScreenshot } from "../lib/screenshot";
+import { logger } from "../lib/logger";
+
+/**
+ * Fire-and-forget: captures `link`'s screenshot and stores it once ready, without
+ * making the caller (a create/update request, or the backfill cron) wait on it - a
+ * capture can take several seconds, which is fine in the background but not for a
+ * request/response cycle.
+ */
+function scheduleScreenshotCapture(id: string, link: string): void {
+  captureScreenshot(link)
+    .then((previewImageUrl) => {
+      if (!previewImageUrl) return;
+      return db.update(projectsTable).set({ previewImageUrl }).where(eq(projectsTable.id, id));
+    })
+    .catch((err) => logger.warn({ err, id, link }, "Failed to store captured screenshot"));
+}
 
 const router: IRouter = Router();
 
@@ -42,6 +59,7 @@ router.post("/projects", requireAuth, async (req, res) => {
     mainCategoryName: body.mainCategoryName ?? null,
     subCategoryId: body.subCategoryId ?? null,
     subCategoryName: body.subCategoryName ?? null,
+    previewImageUrl: null,
     sortOrder: 0,
     isHidden: false,
     lastCheckedAt: null,
@@ -50,6 +68,7 @@ router.post("/projects", requireAuth, async (req, res) => {
   };
 
   await db.insert(projectsTable).values(row);
+  if (row.link) scheduleScreenshotCapture(row.id, row.link);
   res.status(201).json(row);
 });
 
@@ -81,9 +100,18 @@ router.put("/projects/:id", requireAuth, async (req, res, next) => {
   }
 
   const body = UpdateProjectBody.parse(req.body);
-  const after = { ...existing, ...body, updatedAt: Date.now() };
+  const linkChanged = body.link !== undefined && body.link !== existing.link;
+  const after = {
+    ...existing,
+    ...body,
+    // A new link needs a fresh screenshot - clear the stale one now so the public site
+    // shows the "generating" fallback instead of the old link's preview in the meantime.
+    previewImageUrl: linkChanged ? null : existing.previewImageUrl,
+    updatedAt: Date.now(),
+  };
 
   await db.update(projectsTable).set(after).where(eq(projectsTable.id, id));
+  if (linkChanged && after.link) scheduleScreenshotCapture(id, after.link);
   res.json(after);
 });
 

@@ -20,4 +20,6 @@ export interface MediaCreateRequest {
   subCategoryName?: string | null;
   playStoreLink?: string | null;
   appStoreLink?: string | null;
+  figmaLink?: string | null;
+  websiteLink?: string | null;
 }

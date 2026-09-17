@@ -26,6 +26,8 @@ export const mediaTable = mysqlTable("media", {
   subCategoryName: varchar("sub_category_name", { length: 255 }),
   playStoreLink: varchar("play_store_link", { length: 1000 }),
   appStoreLink: varchar("app_store_link", { length: 1000 }),
+  figmaLink: varchar("figma_link", { length: 1000 }),
+  websiteLink: varchar("website_link", { length: 1000 }),
   // Lower sorts first within a (mainCategoryId, subCategoryId) group; ties (the
   // common case - nothing manually reordered yet) break by createdAt DESC, so
   // newly-created items naturally show up first without any special-casing.

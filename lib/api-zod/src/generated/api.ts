@@ -120,6 +120,7 @@ export const ListProjectsResponseItem = zod.object({
   description: zod.string().nullish(),
   link: zod.string().nullish(),
   imageUrl: zod.string().nullish(),
+  previewImageUrl: zod.string().nullish(),
   categoryId: zod.string().nullish(),
   categoryName: zod.string().nullish(),
   mainCategoryId: zod.string().nullish(),
@@ -185,6 +186,7 @@ export const UpdateProjectResponse = zod.object({
   description: zod.string().nullish(),
   link: zod.string().nullish(),
   imageUrl: zod.string().nullish(),
+  previewImageUrl: zod.string().nullish(),
   categoryId: zod.string().nullish(),
   categoryName: zod.string().nullish(),
   mainCategoryId: zod.string().nullish(),
@@ -234,6 +236,8 @@ export const ListMediaResponse = zod.object({
       subCategoryName: zod.string().nullish(),
       playStoreLink: zod.string().nullish(),
       appStoreLink: zod.string().nullish(),
+      figmaLink: zod.string().nullish(),
+      websiteLink: zod.string().nullish(),
       sortOrder: zod.number(),
       createdAt: zod.number(),
       updatedAt: zod.number().nullish(),
@@ -260,6 +264,8 @@ export const CreateMediaBody = zod.object({
   subCategoryName: zod.string().nullish(),
   playStoreLink: zod.string().nullish(),
   appStoreLink: zod.string().nullish(),
+  figmaLink: zod.string().nullish(),
+  websiteLink: zod.string().nullish(),
 });
 
 /**
@@ -292,6 +298,8 @@ export const UpdateMediaBody = zod.object({
   subCategoryName: zod.string().nullish(),
   playStoreLink: zod.string().nullish(),
   appStoreLink: zod.string().nullish(),
+  figmaLink: zod.string().nullish(),
+  websiteLink: zod.string().nullish(),
 });
 
 export const UpdateMediaResponse = zod.object({
@@ -309,6 +317,8 @@ export const UpdateMediaResponse = zod.object({
   subCategoryName: zod.string().nullish(),
   playStoreLink: zod.string().nullish(),
   appStoreLink: zod.string().nullish(),
+  figmaLink: zod.string().nullish(),
+  websiteLink: zod.string().nullish(),
   sortOrder: zod.number(),
   createdAt: zod.number(),
   updatedAt: zod.number().nullish(),

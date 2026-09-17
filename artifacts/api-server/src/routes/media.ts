@@ -90,6 +90,8 @@ router.post("/media", requireAuth, async (req, res) => {
     subCategoryName: body.subCategoryName ?? null,
     playStoreLink: body.playStoreLink ?? null,
     appStoreLink: body.appStoreLink ?? null,
+    figmaLink: body.figmaLink ?? null,
+    websiteLink: body.websiteLink ?? null,
     sortOrder: 0,
     createdAt: Date.now(),
     updatedAt: null,
